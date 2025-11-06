@@ -1,0 +1,150 @@
+Se requiere crear un chat para intercambiar mensajes en la comunidad académica de la Universidad usando java 21 con JDBC y JavaFX. El chat debe implementar las siguientes funcionalidades:
+
+    Servidor:
+
+        - Registra los clientes del chat. Se requiere un nombre de usuario, un email, una contraseña de acceso, foto y la dirección IP. 
+
+        - Se debe restringir el número de usuarios conectados a la red, utilizando archivos de configuración.
+
+        - Se debe registrar los logs de los mensajes enviados entre los usuarios y en los canales, adicionalmente incluir archivos compartidos de audio.
+
+        - Se debe crear una transcripción de los mensajes de audio enviados entre clientes.
+
+        - La información se almacenará en una base de datos relacional (Mysql), deben utilizar archivos de configuración para configurar la conexión.
+
+        - Enviar mensajes a todos los usuarios y canales.
+
+        - Cerrar conexiones.
+
+        - Informes de usuarios: 
+
+            - usuarios registrados
+
+            - canales con usuarios vinculados
+
+            - usuarios conectados
+
+            - texto de los mensajes de audio enviados
+
+            - logs
+
+    Cliente:
+
+        - Todos los usuarios son visibles a la comunidad.
+
+        - Puede crear canales privados de comunicación y vincular usuarios según lo considere conveniente.
+
+        - Cada usuario podrá aceptar o rechazar las solicitudes de pertenecer a un grupo en particular.
+
+        - Se podrá intercambiar mensajes (texto o audio) con un usuario específico o con los miembros de un canal.
+
+        - La información se almacenará en una base de datos relacional (H2Database), deben utilizar archivos de configuración para configurar conexión.
+
+        - La aplicación cliente y servidor serán aplicaciones de escritorio. Se requiere crear aplicaciones con capas y con componentes.
+
+El protocolo de comunicación entre el cliente/servidor será TCP-IP.
+
+Aplicar patrones de diseño:
+
+    - Fábricas
+
+    - Observer
+
+    - Object Pool
+
+Aplicar principios SOLID
+
+============================
+Estructura recomendada del proyecto:
+============================
+
+cliente-servidor/
+├── cliente/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   ├── com/universidad/chat/cliente/
+│   │   │   │   │   ├── app/           # JavaFX App y vistas
+│   │   │   │   │   ├── controller/    # Controladores de UI y lógica
+│   │   │   │   │   ├── model/         # Entidades y DAOs (H2Database)
+│   │   │   │   │   ├── service/       # Servicios, comunicación TCP, audio
+│   │   │   │   │   ├── util/          # Utilidades, patrones (Factory, Observer, ObjectPool)
+│   │   │   │   │   └── config/        # Configuración de conexión H2
+│   │   │   └── resources/
+│   │   │       ├── config.properties  # Configuración BD y cliente
+│   │   │       ├── log/               # Logs de cliente
+│   │   │       └── images/            # Fotos de usuario
+│   ├── test/                          # Pruebas unitarias
+│   └── README.md
+├── servidor/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   ├── com/universidad/chat/servidor/
+│   │   │   │   │   ├── app/           # Main server app
+│   │   │   │   │   ├── controller/    # Controladores de lógica servidor
+│   │   │   │   │   ├── model/         # Entidades y DAOs (MySQL)
+│   │   │   │   │   ├── service/       # Servicios, gestión usuarios, canales, logs, audio
+│   │   │   │   │   ├── util/          # Utilidades, patrones (Factory, Observer, ObjectPool)
+│   │   │   │   │   └── config/        # Configuración de conexión MySQL y límites
+│   │   │   └── resources/
+│   │   │       ├── config.properties  # Configuración BD y servidor
+│   │   │       ├── log/               # Logs de servidor y mensajes
+│   │   │       └── audio/             # Archivos de audio compartidos
+│   ├── test/                          # Pruebas unitarias
+│   └── README.md
+├── docs/                              # Documentación y diagramas
+│   ├── arquitectura.md
+│   ├── patrones.md
+│   └── requisitos.md
+├── requisitos.txt                     # Requisitos del proyecto
+└── README.md                          # Descripción general del proyecto
+
+Notas:
+- Cada módulo (cliente/servidor) implementa capas: presentación (app), lógica/controladores, modelo/DAO, servicios y utilidades.
+- Los archivos de configuración permiten cambiar parámetros sin modificar el código.
+- Los patrones de diseño se aplican en utilidades y servicios.
+- Los logs y archivos de audio se almacenan en las carpetas correspondientes.
+- La base de datos H2 se usa en cliente y MySQL en servidor.
+- El protocolo de comunicación es TCP-IP.
+- Se recomienda usar principios SOLID en la organización de clases y componentes.
+
+============================
+Protocolo de comunicación propietario sobre TCP-IP
+============================
+
+El sistema usará un protocolo propio, orientado a mensajes, sobre TCP-IP. Cada mensaje intercambiado entre cliente y servidor tendrá la siguiente estructura binaria:
+
+Cabecera (Header):
+- Versión del protocolo (1 byte)
+- Tipo de mensaje (1 byte)
+- Longitud del cuerpo (4 bytes, entero sin signo, big-endian)
+- ID de usuario (opcional, 4 bytes)
+
+Cuerpo (Body):
+- Datos codificados en UTF-8, JSON o binario según el tipo de mensaje
+
+Tipos de mensaje (Type):
+- 0x01: Registro de usuario
+- 0x02: Autenticación
+- 0x03: Mensaje de texto
+- 0x04: Mensaje de audio
+- 0x05: Solicitud de canal
+- 0x06: Respuesta de canal
+- 0x07: Mensaje a canal
+- 0x08: Solicitud de lista de usuarios/canales
+- 0x09: Envío de archivo
+- 0x0A: Solicitud de cierre de sesión/conexión
+- 0x0B: Notificación/Control
+
+Ejemplo de mensaje:
+[0x01][0x03][0x00 0x00 0x00 0x15][0x00 0x00 0x00 0x05][{"to": "canal1", "msg": "Hola a todos"}]
+
+Reglas generales:
+- Todos los mensajes deben respetar la estructura definida.
+- El servidor valida la longitud y tipo antes de procesar.
+- Los mensajes de audio y archivos se envían en formato binario, precedidos por metadatos en JSON.
+- Los errores se comunican con mensajes de tipo 0x0B y un campo "error" en el cuerpo.
+- El cierre de conexión se realiza con tipo 0x0A.
+
+La especificación detallada estará en docs/arquitectura.md.

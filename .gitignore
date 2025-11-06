@@ -1,0 +1,47 @@
+# --- Java/Maven build artifacts ---
+**/target/
+*.class
+*.jar
+*.war
+*.ear
+
+# --- IDE/editor configs ---
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+
+# --- OS / misc ---
+.DS_Store
+Thumbs.db
+*.log
+
+# --- H2 local databases (per-user) ---
+**/*.mv.db
+**/*.trace.db
+**/data/
+cliente/data/
+
+# --- App uploads / generated media ---
+uploads/
+servidor/uploads/
+cliente/uploads/
+
+# --- Vosk models (large) ---
+servidor/vosk-models/
+
+# --- Node / scripts cache ---
+node_modules/
+
+# --- Env/secrets (add if used) ---
+.env
+.env.local
+*.properties.local
+
+# --- Maven wrapper (optional include) ---
+.mvn/wrapper/maven-wrapper.jar
+
+# --- VS Code settings (optional include) ---
+# .vscode/

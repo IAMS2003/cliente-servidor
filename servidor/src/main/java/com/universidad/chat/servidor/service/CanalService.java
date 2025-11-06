@@ -1,0 +1,164 @@
+package com.universidad.chat.servidor.service;
+
+import com.universidad.chat.servidor.model.Canal;
+import com.universidad.chat.servidor.model.CanalDAO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.sql.SQLException;
+import java.util.List;
+
+/**
+ * Servicio para gestión de canales en el servidor.
+ * Aplica principio SRP (Single Responsibility Principle).
+ */
+public class CanalService {
+    private static final Logger logger = LoggerFactory.getLogger(CanalService.class);
+    private final CanalDAO canalDAO;
+
+    public CanalService() {
+        this.canalDAO = new CanalDAO();
+    }
+
+    /**
+     * Crear un nuevo canal.
+     */
+    public int crearCanal(String nombre, int idCreador, boolean esPrivado) {
+        try {
+            Canal nuevoCanal = new Canal(0, nombre, idCreador, esPrivado);
+            int id = canalDAO.crear(nuevoCanal);
+            
+            if (id > 0) {
+                // Agregar al creador como miembro y aceptarlo automáticamente
+                canalDAO.agregarUsuario(id, idCreador);
+                canalDAO.aceptarUsuario(id, idCreador);
+                logger.info("Canal creado: {} (ID: {}) por usuario {}", nombre, id, idCreador);
+            }
+            
+            return id;
+        } catch (SQLException e) {
+            logger.error("Error creando canal", e);
+            return -1;
+        }
+    }
+
+    /**
+     * Solicitar unirse a un canal.
+     */
+    public boolean solicitarUnirse(int idCanal, int idUsuario) {
+        try {
+            canalDAO.agregarUsuario(idCanal, idUsuario);
+            logger.info("Usuario {} solicitó unirse al canal {}", idUsuario, idCanal);
+            return true;
+        } catch (SQLException e) {
+            logger.error("Error solicitando unirse a canal", e);
+            return false;
+        }
+    }
+
+    /**
+     * Aceptar solicitud de usuario a canal.
+     */
+    public boolean aceptarSolicitud(int idCanal, int idUsuario) {
+        try {
+            canalDAO.aceptarUsuario(idCanal, idUsuario);
+            logger.info("Usuario {} aceptado en canal {}", idUsuario, idCanal);
+            return true;
+        } catch (SQLException e) {
+            logger.error("Error aceptando solicitud", e);
+            return false;
+        }
+    }
+
+    /**
+     * Rechazar invitación a canal.
+     */
+    public void rechazarInvitacion(int idCanal, int idUsuario) throws SQLException {
+        canalDAO.rechazarInvitacion(idCanal, idUsuario);
+        logger.info("Usuario {} rechazó invitación al canal {}", idUsuario, idCanal);
+    }
+
+    /**
+     * Invitar a un usuario a un canal (por un miembro actual del canal).
+     * Agrega al usuario pero lo deja pendiente (aceptado=FALSE) hasta que acepte.
+     */
+    public boolean invitarUsuario(int idCanal, int idInvitador, int idInvitado) {
+        try {
+            // Verificar que el invitador es miembro aceptado
+            if (!canalDAO.esMiembroAceptado(idCanal, idInvitador)) {
+                logger.warn("Invitador {} no es miembro aceptado del canal {}", idInvitador, idCanal);
+                return false;
+            }
+            // Agregar relación si no existe, pero NO aceptar automáticamente
+            if (!canalDAO.existeRelacion(idCanal, idInvitado)) {
+                canalDAO.agregarUsuario(idCanal, idInvitado);
+            }
+            // NO se acepta automáticamente - el usuario debe decidir
+            logger.info("Usuario {} invitado al canal {} por {} (pendiente de aceptación)", idInvitado, idCanal, idInvitador);
+            return true;
+        } catch (SQLException e) {
+            logger.error("Error invitando usuario al canal", e);
+            return false;
+        }
+    }
+
+    /**
+     * Obtener todos los canales.
+     */
+    public List<Canal> obtenerTodosLosCanales() {
+        try {
+            return canalDAO.obtenerTodos();
+        } catch (SQLException e) {
+            logger.error("Error obteniendo canales", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Obtener canales donde el usuario es miembro aceptado.
+     */
+    public List<Canal> obtenerCanalesDeUsuario(int idUsuario) {
+        try {
+            return canalDAO.obtenerCanalesDeUsuario(idUsuario);
+        } catch (SQLException e) {
+            logger.error("Error obteniendo canales del usuario {}", idUsuario, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Obtener usuarios de un canal.
+     */
+    public List<Integer> obtenerMiembrosCanal(int idCanal) {
+        try {
+            return canalDAO.obtenerUsuariosCanal(idCanal);
+        } catch (SQLException e) {
+            logger.error("Error obteniendo miembros del canal", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Obtener usuarios con invitación pendiente de un canal.
+     */
+    public List<Integer> obtenerPendientesCanal(int idCanal) {
+        try {
+            return canalDAO.obtenerPendientesCanal(idCanal);
+        } catch (SQLException e) {
+            logger.error("Error obteniendo pendientes del canal", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Obtener canal por ID.
+     */
+    public Canal obtenerCanalPorId(int id) {
+        try {
+            return canalDAO.obtenerPorId(id);
+        } catch (SQLException e) {
+            logger.error("Error obteniendo canal por ID", e);
+            return null;
+        }
+    }
+}
