@@ -51,7 +51,11 @@ public class ServidorTCP {
         while (ejecutando) {
             try {
                 Socket clienteSocket = serverSocket.accept();
-                logger.info("Nueva conexión desde: {}", clienteSocket.getInetAddress());
+                String remoteIp = clienteSocket.getInetAddress().getHostAddress();
+                int remotePort = clienteSocket.getPort();
+                String localIp = clienteSocket.getLocalAddress().getHostAddress();
+                int localPort = clienteSocket.getLocalPort();
+                logger.info("Nueva conexión desde {}:{} hacia {}:{}", remoteIp, remotePort, localIp, localPort);
                 
                 poolHilos.execute(new ManejadorCliente(clienteSocket));
             } catch (IOException e) {
@@ -111,7 +115,7 @@ public class ServidorTCP {
                     procesarMensaje(mensaje);
                 }
             } catch (EOFException e) {
-                logger.info("Cliente desconectado: {}", socket.getInetAddress());
+                logger.info("Cliente desconectado: {}:{}", socket.getInetAddress().getHostAddress(), socket.getPort());
             } catch (IOException e) {
                 logger.error("Error procesando cliente", e);
             } finally {

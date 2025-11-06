@@ -123,8 +123,11 @@ public class ServerDashboardView extends BorderPane {
         colId.setCellValueFactory(c -> new javafx.beans.property.SimpleIntegerProperty(c.getValue().getId()));
         TableColumn<com.universidad.chat.servidor.model.Usuario, String> colUser = new TableColumn<>("Usuario");
         colUser.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getNombreUsuario()));
-        TableColumn<com.universidad.chat.servidor.model.Usuario, String> colIP = new TableColumn<>("IP");
-        colIP.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getDireccionIP()));
+        TableColumn<com.universidad.chat.servidor.model.Usuario, String> colIP = new TableColumn<>("IP:Puerto");
+        colIP.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(
+            (c.getValue().getDireccionIP() != null ? c.getValue().getDireccionIP() : "") +
+            (c.getValue().getPuertoConexion() != null ? (":" + c.getValue().getPuertoConexion()) : "")
+        ));
         TableColumn<com.universidad.chat.servidor.model.Usuario, Boolean> colCon = new TableColumn<>("Conectado");
         colCon.setCellValueFactory(c -> new javafx.beans.property.SimpleBooleanProperty(c.getValue().isConectado()));
     usuariosTable.getColumns().addAll(colId, colUser, colIP, colCon);
@@ -346,8 +349,11 @@ public class ServerDashboardView extends BorderPane {
         cId.setCellValueFactory(c -> new javafx.beans.property.SimpleIntegerProperty(c.getValue().getId()));
         TableColumn<com.universidad.chat.servidor.model.Usuario, String> cNom = new TableColumn<>("Usuario");
         cNom.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getNombreUsuario()));
-        TableColumn<com.universidad.chat.servidor.model.Usuario, String> cIP = new TableColumn<>("IP");
-        cIP.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getDireccionIP()));
+        TableColumn<com.universidad.chat.servidor.model.Usuario, String> cIP = new TableColumn<>("IP:Puerto");
+        cIP.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(
+            (c.getValue().getDireccionIP() != null ? c.getValue().getDireccionIP() : "") +
+            (c.getValue().getPuertoConexion() != null ? (":" + c.getValue().getPuertoConexion()) : "")
+        ));
         tvConInf = new TableView<>();
     tvConInf.getColumns().add(cId);
     tvConInf.getColumns().add(cNom);

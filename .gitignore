@@ -40,6 +40,11 @@ node_modules/
 .env.local
 *.properties.local
 
+# --- Network config per-machine (optional override) ---
+# Cada maquina puede tener su propia configuracion sin commitear
+cliente/config.network.properties
+config.network.properties
+
 # --- Maven wrapper (optional include) ---
 .mvn/wrapper/maven-wrapper.jar
 

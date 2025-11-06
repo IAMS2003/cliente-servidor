@@ -72,8 +72,12 @@ public class ServidorTCPIntegrado {
         while (ejecutando) {
             try {
                 Socket clienteSocket = serverSocket.accept();
-                logger.info("Nueva conexión desde: {}", clienteSocket.getInetAddress());
-                if (listener != null) listener.onClientSocketConnected(clienteSocket.getInetAddress().toString());
+                String remoteIp = clienteSocket.getInetAddress().getHostAddress();
+                int remotePort = clienteSocket.getPort();
+                String localIp = clienteSocket.getLocalAddress().getHostAddress();
+                int localPort = clienteSocket.getLocalPort();
+                logger.info("Nueva conexión desde {}:{} hacia {}:{}", remoteIp, remotePort, localIp, localPort);
+                if (listener != null) listener.onClientSocketConnected(remoteIp + ":" + remotePort);
                 
                 ManejadorCliente manejador = new ManejadorCliente(clienteSocket);
                 poolHilos.execute(manejador);
@@ -120,11 +124,27 @@ public class ServidorTCPIntegrado {
 
     // ==== Métodos para UI ====
     public java.util.List<com.universidad.chat.servidor.model.Usuario> obtenerUsuariosConectados() {
-        return usuarioService.obtenerUsuariosConectados();
+        var lista = usuarioService.obtenerUsuariosConectados();
+        // Enriquecer con puerto en vivo desde los sockets conectados
+        for (var u : lista) {
+            var mc = clientesConectados.get(u.getId());
+            if (mc != null) {
+                try { u.setPuertoConexion(mc.socket.getPort()); } catch (Exception ignored) {}
+            }
+        }
+        return lista;
     }
 
     public java.util.List<com.universidad.chat.servidor.model.Usuario> obtenerTodosUsuarios() {
-        return usuarioService.obtenerTodosLosUsuarios();
+        var lista = usuarioService.obtenerTodosLosUsuarios();
+        // Añadir puerto sólo para los que están conectados actualmente
+        for (var u : lista) {
+            var mc = clientesConectados.get(u.getId());
+            if (mc != null) {
+                try { u.setPuertoConexion(mc.socket.getPort()); } catch (Exception ignored) {}
+            }
+        }
+        return lista;
     }
 
     public java.util.List<com.universidad.chat.servidor.model.Canal> obtenerCanales() {
@@ -282,7 +302,7 @@ public class ServidorTCPIntegrado {
                     procesarMensaje(mensaje);
                 }
             } catch (EOFException e) {
-                logger.info("Cliente desconectado: {}", socket.getInetAddress());
+                logger.info("Cliente desconectado: {}:{}", socket.getInetAddress().getHostAddress(), socket.getPort());
             } catch (IOException e) {
                 logger.error("Error procesando cliente", e);
                 if (listener != null) listener.onError("cliente", e.getMessage());

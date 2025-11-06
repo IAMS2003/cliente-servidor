@@ -24,7 +24,7 @@ import java.util.function.Predicate;
 public class ClienteProtocoloService implements Closeable {
     private static final Logger logger = LoggerFactory.getLogger(ClienteProtocoloService.class);
 
-    private final ClienteTCP cliente;
+    private ClienteTCP cliente;
     private final Gson gson = new Gson();
     private final List<Waiter> waiters = java.util.Collections.synchronizedList(new LinkedList<>());
     private volatile Integer idUsuario;
@@ -44,10 +44,62 @@ public class ClienteProtocoloService implements Closeable {
     private volatile EventosCliente eventos;
 
     public ClienteProtocoloService() {
-        this("localhost", 8080);
+        // Leer host/puerto desde config.network.properties (o config.properties como fallback)
+        String host = "localhost";
+        int port = 8080;
+        int timeoutSec = 5;
+        try {
+            java.util.Properties p = new java.util.Properties();
+            // 1) Intentar leer archivos externos en el directorio de trabajo (no requiere recompilar)
+            try {
+                java.nio.file.Path extNet = java.nio.file.Paths.get("config.network.properties");
+                if (java.nio.file.Files.exists(extNet)) {
+                    try (var in = java.nio.file.Files.newInputStream(extNet)) { p.load(in); }
+                }
+            } catch (Exception ignored) {}
+            if (p.isEmpty()) {
+                try {
+                    java.nio.file.Path extCfg = java.nio.file.Paths.get("config.properties");
+                    if (java.nio.file.Files.exists(extCfg)) {
+                        try (var in2 = java.nio.file.Files.newInputStream(extCfg)) { p.load(in2); }
+                    }
+                } catch (Exception ignored) {}
+            }
+            // 2) Si no hay externos, cargar del classpath (empaquetado en el JAR)
+            if (p.isEmpty()) {
+                try (var in = Thread.currentThread().getContextClassLoader().getResourceAsStream("config.network.properties")) {
+                    if (in != null) { p.load(in); }
+                }
+            }
+            if (p.isEmpty()) {
+                try (var in2 = Thread.currentThread().getContextClassLoader().getResourceAsStream("config.properties")) {
+                    if (in2 != null) { p.load(in2); }
+                }
+            }
+            // 3) Permitir override por System properties (-Dchat.server.host=...)
+            String hostProp = java.lang.System.getProperty("chat.server.host");
+            String portProp = java.lang.System.getProperty("chat.server.port");
+            String toProp = java.lang.System.getProperty("chat.timeout.seconds");
+
+            host = hostProp != null ? hostProp.trim() : p.getProperty("chat.server.host", host).trim();
+            String portStr = portProp != null ? portProp.trim() : p.getProperty("chat.server.port", String.valueOf(port)).trim();
+            try { port = Integer.parseInt(portStr); } catch (Exception ignored) {}
+            String tStr = toProp != null ? toProp.trim() : p.getProperty("chat.timeout.seconds", String.valueOf(timeoutSec)).trim();
+            try { timeoutSec = Integer.parseInt(tStr); } catch (Exception ignored) {}
+            logger.info("ClienteProtocoloService usando servidor {}:{} (timeout={}s)", host, port, timeoutSec);
+        } catch (Exception e) {
+            logger.warn("No se pudo leer configuración de red, usando defaults {}:{}", host, port);
+        }
+        inicializarCliente(host, port);
+        // Nota: timeoutSec se usa en esperarNotificacion(...) ya que pasamos Duration.ofSeconds(5) en llamadas.
+        // Si se quiere centralizar, podemos reemplazar los 5s por una constante configurable.
     }
 
     public ClienteProtocoloService(String host, int port) {
+        inicializarCliente(host, port);
+    }
+
+    private void inicializarCliente(String host, int port) {
         this.cliente = new ClienteTCP(host, port);
         this.cliente.addListener(new ClienteTCP.Listener() {
             @Override

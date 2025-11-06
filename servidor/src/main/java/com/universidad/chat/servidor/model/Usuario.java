@@ -12,6 +12,7 @@ public class Usuario {
     private String contrasena;
     private String foto;
     private String direccionIP;
+    private Integer puertoConexion; // Puerto del socket remoto de la última conexión
     private boolean conectado;
     private LocalDateTime fechaRegistro;
 
@@ -79,6 +80,9 @@ public class Usuario {
         this.direccionIP = direccionIP;
     }
 
+    public Integer getPuertoConexion() { return puertoConexion; }
+    public void setPuertoConexion(Integer puertoConexion) { this.puertoConexion = puertoConexion; }
+
     public boolean isConectado() {
         return conectado;
     }
@@ -101,6 +105,7 @@ public class Usuario {
                 "id=" + id +
                 ", nombreUsuario='" + nombreUsuario + '\'' +
                 ", email='" + email + '\'' +
+        ", ip='" + direccionIP + ':' + (puertoConexion!=null?puertoConexion:"-") + '\'' +
                 ", conectado=" + conectado +
                 '}';
     }

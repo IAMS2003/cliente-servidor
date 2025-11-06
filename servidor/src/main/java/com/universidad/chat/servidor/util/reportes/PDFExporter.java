@@ -92,7 +92,12 @@ public class PDFExporter {
                         cs = new PDPageContentStream(doc, page);
                         cs.setFont(PDType1Font.HELVETICA, 10);
                     }
-                    String line = String.format("ID:%d | %s | IP:%s", u.getId(), u.getNombreUsuario(), u.getDireccionIP());
+                    String line = String.format(
+                        "ID:%d | %s | IP:%s",
+                        u.getId(),
+                        u.getNombreUsuario(),
+                        u.getDireccionIP() + (u.getPuertoConexion()!=null?":"+u.getPuertoConexion():"")
+                    );
                     cs.beginText();
                     cs.newLineAtOffset(margin, y);
                     cs.showText(line);
