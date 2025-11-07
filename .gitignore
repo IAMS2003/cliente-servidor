@@ -29,8 +29,7 @@ uploads/
 servidor/uploads/
 cliente/uploads/
 
-# --- Vosk models (large) ---
-servidor/vosk-models/
+# --- Vosk models (la
 
 # --- Node / scripts cache ---
 node_modules/
@@ -42,8 +41,6 @@ node_modules/
 
 # --- Network config per-machine (optional override) ---
 # Cada maquina puede tener su propia configuracion sin commitear
-cliente/config.network.properties
-config.network.properties
 
 # --- Maven wrapper (optional include) ---
 .mvn/wrapper/maven-wrapper.jar
