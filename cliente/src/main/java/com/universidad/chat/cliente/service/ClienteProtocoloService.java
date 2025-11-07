@@ -287,10 +287,6 @@ public class ClienteProtocoloService implements Closeable {
         }
     }
 
-    public void responderInvitacionCanalRemoto(int idCanal, boolean aceptar, String nombreCanal, int idCreador, boolean esPrivado, String servidorHost, int servidorP2pPort) throws IOException {
-        cliente.responderInvitacionCanalRemoto(idCanal, aceptar, nombreCanal, idCreador, esPrivado, servidorHost, servidorP2pPort);
-    }
-
     public CompletableFuture<JsonObject> solicitarLista(String tipo) {
         try {
             cliente.solicitarLista(tipo);

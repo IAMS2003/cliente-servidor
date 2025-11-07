@@ -156,17 +156,4 @@ public class MensajeService {
             return -1;
         }
     }
-
-    /**
-     * Verifica si un mensaje ya existe en la base de datos.
-     * Útil para evitar duplicados al recibir mensajes de servidores remotos.
-     */
-    public boolean mensajeExiste(int idEmisor, int idReceptor, Integer idCanal, String contenido) {
-        try {
-            return mensajeLogDAO.mensajeExiste(idEmisor, idReceptor, idCanal, contenido);
-        } catch (SQLException e) {
-            logger.error("Error verificando existencia de mensaje", e);
-            return false; // En caso de error, asumimos que no existe para no perder el mensaje
-        }
-    }
 }

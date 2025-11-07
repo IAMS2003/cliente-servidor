@@ -190,22 +190,4 @@ public class UsuarioService {
             return null;
         }
     }
-
-    /**
-     * Obtener o crear un usuario remoto proveniente de otro servidor.
-     * Si ya existe por (nombre, servidorHost, servidorPuerto) se retorna su ID local.
-     * Si no existe, se crea intentando preservar el ID remoto cuando sea posible.
-     * Retorna el ID local.
-     */
-    public int obtenerOCrearUsuarioRemoto(int remoteId, String nombreUsuario, String servidorHost, int servidorPuerto) {
-        try {
-            int idLocal = usuarioDAO.crearRemotoSiNoExiste(remoteId, nombreUsuario, servidorHost, servidorPuerto);
-            if (idLocal > 0) return idLocal;
-            logger.error("No se pudo obtener/crear usuario remoto {}@{}:{} (remoteId={})", nombreUsuario, servidorHost, servidorPuerto, remoteId);
-            return -1;
-        } catch (SQLException e) {
-            logger.error("Error creando usuario remoto {}@{}:{}", nombreUsuario, servidorHost, servidorPuerto, e);
-            return -1;
-        }
-    }
 }

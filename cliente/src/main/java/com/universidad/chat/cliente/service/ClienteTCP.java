@@ -169,19 +169,6 @@ public class ClienteTCP {
         enviarMensaje(new Mensaje(TipoMensaje.SOLICITUD_CANAL, 0, body.toString()));
     }
 
-    public void responderInvitacionCanalRemoto(int idCanal, boolean aceptar, String nombreCanal, int idCreador, boolean esPrivado, String servidorHost, int servidorP2pPort) throws IOException {
-        JsonObject body = new JsonObject();
-        body.addProperty("accion", "responder_invitacion");
-        body.addProperty("idCanal", idCanal);
-        body.addProperty("aceptar", aceptar);
-        body.addProperty("nombreCanal", nombreCanal);
-        body.addProperty("idCreador", idCreador);
-        body.addProperty("esPrivado", esPrivado);
-        body.addProperty("servidorHost", servidorHost);
-        body.addProperty("servidorP2pPort", servidorP2pPort);
-        enviarMensaje(new Mensaje(TipoMensaje.SOLICITUD_CANAL, 0, body.toString()));
-    }
-
     public void solicitarLista(String tipo) throws IOException {
         JsonObject body = new JsonObject();
         body.addProperty("tipo", tipo);

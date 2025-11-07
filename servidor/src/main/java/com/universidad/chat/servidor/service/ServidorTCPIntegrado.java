@@ -91,18 +91,6 @@ public class ServidorTCPIntegrado {
                     @Override
                     public void onDirectMessageFromPeer(String peerHost, int peerPort, int idEmisor, String nombreEmisor, int idReceptor, String contenido, Long idMensajeOrigen) {
                         try {
-                            // Verificar si el mensaje ya existe para evitar duplicados
-                            if (mensajeService.mensajeExiste(idEmisor, idReceptor, null, contenido)) {
-                                logger.debug("Mensaje duplicado detectado de {} a {}, no se guardará", idEmisor, idReceptor);
-                                // Aunque no se guarde, enviar al usuario si está conectado
-                                JsonObject mensajeReenvio = new JsonObject();
-                                mensajeReenvio.addProperty("idEmisor", idEmisor);
-                                mensajeReenvio.addProperty("idReceptor", idReceptor);
-                                mensajeReenvio.addProperty("contenido", contenido);
-                                enviarAUsuario(idReceptor, new Mensaje(TipoMensaje.MENSAJE_TEXTO, idEmisor, mensajeReenvio.toString()));
-                                return;
-                            }
-                            
                             int idMsg = mensajeService.registrarMensajeTexto(idEmisor, idReceptor, null, contenido);
                             try {
                                 String ev = String.format("DM recibido de %d a %d (via %s:%d)", idEmisor, idReceptor, peerHost, peerPort);
@@ -123,20 +111,6 @@ public class ServidorTCPIntegrado {
                     @Override
                     public void onDirectAudioFromPeer(String peerHost, int peerPort, int idEmisor, String nombreEmisor, int idReceptor, String audioBase64, String transcripcion, Long idMensajeServidorOrigen) {
                         try {
-                            // Verificar si el mensaje de audio ya existe (por transcripción)
-                            String contenidoCheck = transcripcion != null && !transcripcion.isEmpty() ? transcripcion : audioBase64.substring(0, Math.min(100, audioBase64.length()));
-                            if (mensajeService.mensajeExiste(idEmisor, idReceptor, null, contenidoCheck)) {
-                                logger.debug("Mensaje de audio duplicado detectado de {} a {}, no se guardará", idEmisor, idReceptor);
-                                // Aunque no se guarde, enviar al usuario si está conectado
-                                JsonObject mensajeReenvio = new JsonObject();
-                                mensajeReenvio.addProperty("idEmisor", idEmisor);
-                                mensajeReenvio.addProperty("idReceptor", idReceptor);
-                                mensajeReenvio.addProperty("audioData", audioBase64);
-                                if (transcripcion != null) mensajeReenvio.addProperty("transcripcion", transcripcion);
-                                enviarAUsuario(idReceptor, new Mensaje(TipoMensaje.MENSAJE_AUDIO, idEmisor, mensajeReenvio.toString()));
-                                return;
-                            }
-                            
                             // Guardar archivo en disco
                             byte[] audioBytes = java.util.Base64.getDecoder().decode(audioBase64);
                             String directorioAudios = "uploads/audios";
@@ -220,199 +194,6 @@ public class ServidorTCPIntegrado {
                             logger.error("Error obteniendo canales de usuario {}", idUsuario, ex);
                         }
                         return canales;
-                    }
-
-                    @Override
-                    public void onChannelInvitationFromPeer(String peerHost, int peerPort, int idCanal, String nombreCanal, int idCreador, boolean esPrivado, int idInvitador, String nombreInvitador, int idInvitado) {
-                        try {
-                            // Notificar al usuario invitado local
-                            JsonObject notificacion = new JsonObject();
-                            notificacion.addProperty("tipo", "INVITACION_CANAL_REMOTO");
-                            notificacion.addProperty("idCanal", idCanal);
-                            notificacion.addProperty("nombreCanal", nombreCanal);
-                            notificacion.addProperty("idCreador", idCreador);
-                            notificacion.addProperty("esPrivado", esPrivado);
-                            notificacion.addProperty("idInvitador", idInvitador);
-                            notificacion.addProperty("nombreInvitador", nombreInvitador);
-                            notificacion.addProperty("servidorHost", peerHost);
-                            // CRÍTICO: peerPort ahora es el puerto TCP del servidor (8080, 8081, etc)
-                            // Este es el puerto que debe usarse para identificar usuarios en BD
-                            notificacion.addProperty("servidorPort", peerPort);
-                            // Mantener compatibilidad (aunque ya no es el puerto P2P real)
-                            notificacion.addProperty("servidorP2pPort", peerPort);
-                            
-                            enviarAUsuario(idInvitado, new Mensaje(TipoMensaje.NOTIFICACION, 0, notificacion.toString()));
-                            logger.info("Invitación de canal remoto {} enviada a usuario {}", nombreCanal, idInvitado);
-                            
-                            // Registrar evento
-                            try {
-                                String ev = String.format("Invitación a canal remoto %s de servidor %s:%d", nombreCanal, peerHost, peerPort);
-                                mensajeService.registrarEvento("INVITACION_CANAL_REMOTO", ev, idInvitado, null);
-                            } catch (Exception ignored) {}
-                        } catch (Exception ex) {
-                            logger.error("Error procesando invitación de canal remoto", ex);
-                        }
-                    }
-
-                    @Override
-                    public void onChannelAcceptanceFromPeer(String peerHost, int peerPort, int idCanal, int idUsuario, String nombreUsuario) {
-                        try {
-                            // Registrar que usuario remoto aceptó unirse al canal
-                            logger.info("╔═══════════════════════════════════════════════════════════════");
-                            logger.info("║ ACEPTACIÓN DE CANAL DESDE SERVIDOR REMOTO");
-                            logger.info("╠═══════════════════════════════════════════════════════════════");
-                            logger.info("║ Canal ID: {}", idCanal);
-                            logger.info("║ Usuario remoto: {} (ID: {})", nombreUsuario, idUsuario);
-                            logger.info("║ Servidor: {}:{}", peerHost, peerPort);
-                            logger.info("╚═══════════════════════════════════════════════════════════════");
-
-                            // Paso 1: Asegurar que el usuario remoto exista en la tabla usuarios
-                            final int idUsuarioLocal; // usar final para lambdas posteriores
-                            int tmpId = idUsuario;
-                            try {
-                                int creado = usuarioService.obtenerOCrearUsuarioRemoto(idUsuario, nombreUsuario, peerHost, peerPort);
-                                if (creado > 0) {
-                                    tmpId = creado;
-                                    if (creado != idUsuario) {
-                                        logger.info("Mapeo de usuario remoto: remoteId={} -> localId={}", idUsuario, creado);
-                                    } else {
-                                        logger.debug("Usuario remoto mantiene mismo ID local={}", creado);
-                                    }
-                                } else {
-                                    logger.error("Fallo creación/obtención de usuario remoto, se mantiene ID remoto {}", idUsuario);
-                                }
-                            } catch (Exception exRem) {
-                                logger.error("No se pudo asegurar usuario remoto {}:{} (remoteId={}) - {}", peerHost, peerPort, idUsuario, exRem.getMessage());
-                            }
-                            idUsuarioLocal = tmpId;
-                            
-                            // IMPORTANTE: Agregar al usuario remoto como miembro del canal en BD local
-                            // Solo si no existe ya (puede haber sido agregado al enviar la invitación)
-                            try {
-                                // Verificar si ya existe la relación
-                                var miembrosActuales = canalService.obtenerMiembrosConServidor(idCanal);
-                                boolean yaExiste = miembrosActuales.stream()
-                                    .anyMatch(m -> m.getIdUsuario() == idUsuarioLocal && 
-                                                   peerHost.equals(m.getServidorHost()) && 
-                                                   peerPort == (m.getServidorPuerto() != null ? m.getServidorPuerto() : -1));
-                                
-                                if (yaExiste) {
-                                    logger.info("✓ Usuario remoto {}:{}:{} ya existe en canal {} - no es necesario agregarlo nuevamente", 
-                                               idUsuarioLocal, peerHost, peerPort, idCanal);
-                                } else {
-                                    // El usuario está en el servidor remoto (peerHost:peerPort)
-                                    canalService.agregarUsuarioAceptadoDirecto(idCanal, idUsuarioLocal, peerHost, peerPort);
-                                    logger.info("✓ Usuario remoto {}:{}:{} agregado como miembro del canal {} en BD local", 
-                                               idUsuarioLocal, peerHost, peerPort, idCanal);
-                                }
-                            } catch (Exception ex) {
-                                logger.error("✗ Error agregando usuario remoto (localId={}) al canal {}: {}", idUsuarioLocal, idCanal, ex.getMessage());
-                            }
-                            
-                            // Notificar a todos los miembros del canal
-                            JsonObject notifMiembro = new JsonObject();
-                            notifMiembro.addProperty("tipo", "NUEVO_MIEMBRO_CANAL");
-                            notifMiembro.addProperty("idCanal", idCanal);
-                            notifMiembro.addProperty("idUsuario", idUsuarioLocal);
-                            notifMiembro.addProperty("nombreUsuario", nombreUsuario);
-                            notifMiembro.addProperty("esRemoto", true);
-                            notifMiembro.addProperty("servidorHost", peerHost);
-                            notifMiembro.addProperty("servidorP2pPort", peerPort);
-                            
-                            // Enviar notificación a todos los miembros del canal
-                            try {
-                                var miembros = canalService.obtenerMiembrosCanal(idCanal);
-                                Mensaje notificacionMsg = new Mensaje(TipoMensaje.NOTIFICACION, 0, notifMiembro.toString());
-                                for (int idMiembro : miembros) {
-                                    enviarAUsuario(idMiembro, notificacionMsg);
-                                }
-                            } catch (Exception ex) {
-                                logger.warn("Error enviando notificación de nuevo miembro remoto: {}", ex.getMessage());
-                            }
-                            
-                            // Registrar evento
-                            try {
-                                String ev = String.format("Usuario remoto %s se unió al canal desde %s:%d", nombreUsuario, peerHost, peerPort);
-                                mensajeService.registrarEvento("CANAL_MIEMBRO_REMOTO", ev, 0, idCanal);
-                                if (listener != null) listener.onCanalMiembrosChanged(idCanal);
-                            } catch (Exception ignored) {}
-                        } catch (Exception ex) {
-                            logger.error("Error procesando aceptación de canal remoto", ex);
-                        }
-                    }
-
-                    @Override
-                    public void onChannelMessageFromPeer(String peerHost, int peerPort, int idCanal, int idEmisor, String nombreEmisor, String contenido) {
-                        try {
-                            logger.info("╔═══════════════════════════════════════════════════════════════");
-                            logger.info("║ MENSAJE DE CANAL REMOTO RECIBIDO");
-                            logger.info("╠═══════════════════════════════════════════════════════════════");
-                            logger.info("║ Origen: {}:{}", peerHost, peerPort);
-                            logger.info("║ Canal ID: {}", idCanal);
-                            logger.info("║ Emisor: {} (ID: {})", nombreEmisor, idEmisor);
-                            logger.info("║ Contenido: '{}'", contenido);
-                            logger.info("╚═══════════════════════════════════════════════════════════════");
-                            
-                            // Guardar mensaje en BD (evitando duplicados)
-                            if (!mensajeService.mensajeExiste(idEmisor, 0, idCanal, contenido)) {
-                                mensajeService.registrarMensajeTexto(idEmisor, 0, idCanal, contenido);
-                                if (listener != null) listener.onLogsChanged();
-                                logger.info("✓ Mensaje guardado en BD local");
-                            } else {
-                                logger.info("⊗ Mensaje duplicado - NO guardado en BD");
-                            }
-                            
-                            // Reenviar a todos los miembros locales del canal
-                            var miembros = canalService.obtenerMiembrosCanal(idCanal);
-                            logger.info("✓ Miembros locales del canal: {}", miembros.size());
-                            
-                            JsonObject mensajeReenvio = new JsonObject();
-                            mensajeReenvio.addProperty("idEmisor", idEmisor);
-                            mensajeReenvio.addProperty("idCanal", idCanal);
-                            mensajeReenvio.addProperty("contenido", contenido);
-                            mensajeReenvio.addProperty("esRemoto", true);
-                            mensajeReenvio.addProperty("servidorHost", peerHost);
-                            mensajeReenvio.addProperty("servidorPuerto", peerPort);
-                            
-                            Mensaje mensajeCanal = new Mensaje(TipoMensaje.MENSAJE_CANAL, idEmisor, mensajeReenvio.toString());
-                            
-                            logger.info("╔═══════════════════════════════════════════════════════════════");
-                            logger.info("║ REENVIANDO A MIEMBROS LOCALES");
-                            logger.info("╠═══════════════════════════════════════════════════════════════");
-                            for (int idMiembro : miembros) {
-                                logger.info("║  ✉ Enviando a usuario local ID={}", idMiembro);
-                                enviarAUsuario(idMiembro, mensajeCanal);
-                            }
-                            logger.info("╚═══════════════════════════════════════════════════════════════");
-                            
-                            logger.info("✓ Mensaje de canal remoto procesado completamente - {} miembros locales notificados", miembros.size());
-                        } catch (Exception ex) {
-                            logger.error("✗ ERROR procesando mensaje de canal remoto", ex);
-                        }
-                    }
-
-                    @Override
-                    public List<Map<String, Object>> onRequestChannelHistory(int idCanal) {
-                        List<Map<String, Object>> mensajes = new ArrayList<>();
-                        try {
-                            List<MensajeLog> logs = mensajeService.obtenerMensajesCanal(idCanal);
-                            for (MensajeLog log : logs) {
-                                Map<String, Object> msgData = new HashMap<>();
-                                msgData.put("id", log.getId());
-                                msgData.put("idEmisor", log.getIdEmisor());
-                                msgData.put("idCanal", log.getIdCanal());
-                                msgData.put("contenido", log.getContenido());
-                                msgData.put("tipoMensaje", log.getTipoMensaje());
-                                if (log.getArchivoAudio() != null) msgData.put("archivoAudio", log.getArchivoAudio());
-                                if (log.getTranscripcion() != null) msgData.put("transcripcion", log.getTranscripcion());
-                                msgData.put("fecha", log.getFecha().toString());
-                                mensajes.add(msgData);
-                            }
-                            logger.info("Enviando {} mensajes de historial para canal {}", mensajes.size(), idCanal);
-                        } catch (Exception ex) {
-                            logger.error("Error obteniendo historial de canal {}", idCanal, ex);
-                        }
-                        return mensajes;
                     }
                 });
                 interServerService.setLocalConnectedUsersProvider(() -> {
@@ -815,13 +596,6 @@ public class ServidorTCPIntegrado {
                     byte tipoCodigo = entrada.readByte();
                     int longitudCuerpo = entrada.readInt();
                     int idUsuarioMensaje = entrada.readInt();
-
-                    // Validar tamaño del mensaje para evitar OutOfMemoryError
-                    final int MAX_MESSAGE_SIZE = 50 * 1024 * 1024; // 50 MB
-                    if (longitudCuerpo < 0 || longitudCuerpo > MAX_MESSAGE_SIZE) {
-                        logger.error("Tamaño de mensaje inválido: {} bytes. Cerrando conexión.", longitudCuerpo);
-                        break;
-                    }
 
                     // Leer cuerpo
                     byte[] cuerpo = new byte[longitudCuerpo];
@@ -1243,266 +1017,35 @@ public class ServidorTCPIntegrado {
             } else if ("invitar".equals(accion)) {
                 int idCanal = datos.get("idCanal").getAsInt();
                 int idInvitado = datos.get("idUsuarioInvitado").getAsInt();
-                
-                logger.info("╔═══════════════════════════════════════════════════════════════");
-                logger.info("║ INVITACIÓN A CANAL");
-                logger.info("╠═══════════════════════════════════════════════════════════════");
-                logger.info("║ Canal ID: {}", idCanal);
-                logger.info("║ Invitador ID: {}", idUsuario);
-                logger.info("║ Invitado ID: {}", idInvitado);
-                
-                // Verificar si el invitado es local o remoto
-                var usuarioInvitado = usuarioService.obtenerUsuarioPorId(idInvitado);
-                boolean invitadoLocal = (usuarioInvitado != null) &&
-                    servidorConfig.getServerHost().equals(usuarioInvitado.getServidorHost()) && 
-                    servidorConfig.getServerPort() == (usuarioInvitado.getServidorPuerto() != null ? usuarioInvitado.getServidorPuerto() : servidorConfig.getServerPort());
-                
-                logger.info("║ Invitado es: {}", invitadoLocal ? "LOCAL" : "REMOTO");
-                logger.info("╚═══════════════════════════════════════════════════════════════");
-                
-                boolean exito;
-                
-                if (invitadoLocal) {
-                    // Usuario local: agregar a la BD como pendiente (aceptado=FALSE)
-                    exito = canalService.invitarUsuario(idCanal, idUsuario, idInvitado);
-                    logger.info(exito ? "✓ Usuario LOCAL agregado a BD como pendiente" : "✗ ERROR: No se pudo agregar usuario local");
-                } else {
-                    // Usuario remoto: NO agregar a BD todavía, solo reenviar invitación
-                    // Se agregará cuando acepte (en onChannelAcceptanceFromPeer)
-                    exito = true; // Asumimos éxito si es remoto
-                    logger.info("✓ Usuario REMOTO - NO se agrega a BD (se agregará al aceptar)");
-                }
-                
+                boolean exito = canalService.invitarUsuario(idCanal, idUsuario, idInvitado);
                 respuesta.addProperty("exito", exito);
                 respuesta.addProperty("mensaje", exito ? "Usuario invitado al canal" : "No fue posible invitar al usuario");
-                
                 if (exito) {
                     // Obtener información del canal para la notificación
                     var canal = canalService.obtenerCanalPorId(idCanal);
                     var invitador = usuarioService.obtenerUsuarioPorId(idUsuario);
-                    String nombreCanal = canal != null ? canal.getNombre() : "Canal";
-                    String nombreInvitador = invitador != null ? invitador.getNombreUsuario() : "Usuario";
-                    
-                    if (invitadoLocal) {
-                        // Invitado local: notificar directamente
-                        JsonObject notificacion = new JsonObject();
-                        notificacion.addProperty("tipo", "INVITACION_CANAL");
-                        notificacion.addProperty("idCanal", idCanal);
-                        notificacion.addProperty("nombreCanal", nombreCanal);
-                        notificacion.addProperty("idInvitador", idUsuario);
-                        notificacion.addProperty("nombreInvitador", nombreInvitador);
-                        enviarAUsuario(idInvitado, new Mensaje(TipoMensaje.NOTIFICACION, 0, notificacion.toString()));
-                        logger.info("Invitación de canal {} enviada a usuario local {}", nombreCanal, idInvitado);
-                    } else {
-                        // Invitado remoto: reenviar vía P2P
-                        String invitadoHost = null;
-                        int invitadoP2pPort = -1;
-                        
-                        // CRÍTICO: Primero intentar obtener del registro de pares P2P
-                        if (interServerService != null) {
-                            var addr = interServerService.findPeerForUser(idInvitado);
-                            if (addr != null) {
-                                invitadoHost = addr.host;
-                                invitadoP2pPort = addr.p2pPort;
-                                logger.info("✓ Puerto P2P del invitado obtenido del registro: {}:{}", invitadoHost, invitadoP2pPort);
-                            }
-                        }
-                        
-                        // Fallback: usar info del usuario (pero convertir puerto TCP a P2P si es necesario)
-                        if ((invitadoHost == null || invitadoP2pPort <= 0) && usuarioInvitado != null) {
-                            if (usuarioInvitado.getServidorHost() != null) {
-                                invitadoHost = usuarioInvitado.getServidorHost();
-                                // Intentar inferir puerto P2P desde puerto TCP (heurística: TCP + 1010)
-                                // Ej: 8080 -> 9090, 8081 -> 9091
-                                Integer tcpPort = usuarioInvitado.getServidorPuerto();
-                                if (tcpPort != null) {
-                                    invitadoP2pPort = tcpPort + 1010;
-                                    logger.warn("⚠ Puerto P2P inferido desde TCP: {} -> {} (puede ser incorrecto)", tcpPort, invitadoP2pPort);
-                                }
-                            }
-                        }
-                        
-                        if (interServerService != null && invitadoHost != null && invitadoP2pPort > 0) {
-                            // Obtener información del canal para enviar
-                            int idCreador = canal != null ? canal.getIdCreador() : idUsuario;
-                            boolean esPrivado = canal != null ? canal.isEsPrivado() : true;
-                            interServerService.forwardChannelInvitation(invitadoHost, invitadoP2pPort, idCanal, nombreCanal, idCreador, esPrivado, idUsuario, nombreInvitador, idInvitado);
-                            logger.info("Invitación de canal {} reenviada a usuario remoto {} en {}:{}", nombreCanal, idInvitado, invitadoHost, invitadoP2pPort);
-                        } else {
-                            logger.warn("No se pudo determinar servidor del invitado {} para reenvío de invitación", idInvitado);
-                        }
-                    }
-                    
+                    // Notificar al usuario invitado con opción de aceptar/rechazar
+                    JsonObject notificacion = new JsonObject();
+                    notificacion.addProperty("tipo", "INVITACION_CANAL");
+                    notificacion.addProperty("idCanal", idCanal);
+                    notificacion.addProperty("nombreCanal", canal != null ? canal.getNombre() : "Canal");
+                    notificacion.addProperty("idInvitador", idUsuario);
+                    notificacion.addProperty("nombreInvitador", invitador != null ? invitador.getNombreUsuario() : "Usuario");
+                    enviarAUsuario(idInvitado, new Mensaje(TipoMensaje.NOTIFICACION, 0, notificacion.toString()));
                     // Registrar evento
-                    try {
-                        mensajeService.registrarEvento("INVITACION_ENVIADA", "Usuario " + idInvitado + " invitado al canal " + idCanal + " por " + idUsuario, idUsuario, idCanal);
-                    } catch (Exception ignored) {}
-                    if (listener != null) {
-                        listener.onLogsChanged();
-                    }
+                    try { mensajeService.registrarEvento("INVITACION_ENVIADA", "Usuario " + idInvitado + " invitado al canal " + idCanal + " por " + idUsuario, idUsuario, idCanal); } catch (Exception ignored) {}
+                    if (listener != null) { listener.onLogsChanged(); }
                 }
             } else if ("responder_invitacion".equals(accion)) {
                 int idCanal = datos.get("idCanal").getAsInt();
                 boolean aceptar = datos.get("aceptar").getAsBoolean();
                 
-                logger.info("╔═══════════════════════════════════════════════════════════════");
-                logger.info("║ RESPUESTA A INVITACIÓN DE CANAL");
-                logger.info("╠═══════════════════════════════════════════════════════════════");
-                logger.info("║ Canal ID: {}", idCanal);
-                logger.info("║ Usuario ID: {}", idUsuario);
-                logger.info("║ Respuesta: {}", aceptar ? "ACEPTAR" : "RECHAZAR");
-                
-                // Detectar si es canal remoto
-                boolean esRemoto = datos.has("servidorHost") && (datos.has("servidorPort") || datos.has("servidorP2pPort"));
-                String servidorHost = esRemoto ? datos.get("servidorHost").getAsString() : null;
-                // Preferir servidorPort (puerto TCP correcto) sobre servidorP2pPort (legacy)
-                int servidorPort = -1;
-                if (esRemoto) {
-                    if (datos.has("servidorPort")) {
-                        servidorPort = datos.get("servidorPort").getAsInt();
-                    } else if (datos.has("servidorP2pPort")) {
-                        servidorPort = datos.get("servidorP2pPort").getAsInt();
-                        logger.warn("⚠ Usando servidorP2pPort como fallback (debería ser servidorPort)");
-                    }
-                }
-                
-                logger.info("║ Tipo de canal: {}", esRemoto ? "REMOTO" : "LOCAL");
-                if (esRemoto) {
-                    logger.info("║ Servidor remoto: {}:{} (puerto TCP)", servidorHost, servidorPort);
-                }
-                logger.info("╚═══════════════════════════════════════════════════════════════");
-                
-                // Obtener metadatos del canal de la notificación
-                String nombreCanal = datos.has("nombreCanal") ? datos.get("nombreCanal").getAsString() : ("Canal-" + idCanal);
-                int idCreador = datos.has("idCreador") ? datos.get("idCreador").getAsInt() : 0;
-                boolean esPrivado = datos.has("esPrivado") ? datos.get("esPrivado").getAsBoolean() : true;
-                
                 if (aceptar) {
-                    if (esRemoto) {
-                        // Canal remoto: registrar localmente y notificar al servidor origen
-                        var usuario = usuarioService.obtenerUsuarioPorId(idUsuario);
-                        String nombreUsuario = usuario != null ? usuario.getNombreUsuario() : ("user-" + idUsuario);
-                        
-                        // Registrar el canal remoto localmente y agregar al usuario
-                        // El creador está en el servidor remoto, el usuario actual está en este servidor (local)
-                        boolean registrado = canalService.registrarCanalRemotoYAgregarUsuario(
-                            idCanal, nombreCanal, 
-                            idCreador, servidorHost, servidorPort, // ← AHORA USA PUERTO TCP CORRECTO
-                            esPrivado, 
-                            idUsuario, null, null // Usuario local en este servidor
-                        );
-                        if (!registrado) {
-                            logger.warn("No se pudo registrar canal remoto {} para usuario {}", idCanal, idUsuario);
-                        }
-                        
-                        // Para comunicación P2P, necesitamos el puerto P2P del servidor remoto
-                        // Usar heurística: TCP+1010=P2P (8080→9090, 8081→9091)
-                        int servidorP2pPort = servidorPort + 1010;
-                        logger.info("Calculando puerto P2P para comunicación: {} + 1010 = {}", servidorPort, servidorP2pPort);
-                        
-                        if (interServerService != null && servidorHost != null && servidorP2pPort > 0) {
-                            interServerService.forwardChannelAcceptance(servidorHost, servidorP2pPort, idCanal, idUsuario, nombreUsuario);
-                            logger.info("Aceptación de canal remoto {} notificada a {}:{} (P2P)", idCanal, servidorHost, servidorP2pPort);
-                            
-                            // Solicitar historial del canal
-                            interServerService.requestChannelHistory(servidorHost, servidorP2pPort, idCanal, idUsuario);
-                            logger.info("Solicitando historial de canal remoto {} desde {}:{} (P2P)", idCanal, servidorHost, servidorP2pPort);
-                            
-                            // Programar envío de historial después de recibir respuesta
-                            final int idUsuarioFinal = idUsuario;
-                            final int idCanalFinal = idCanal;
-                            final int finalP2pPort = servidorP2pPort;
-                            java.util.concurrent.ScheduledExecutorService scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
-                            scheduler.schedule(() -> {
-                                try {
-                                    Map<String, Object> historyData = interServerService.getChannelHistoryResponse(idCanalFinal, idUsuarioFinal, servidorHost, finalP2pPort);
-                                    if (historyData != null) {
-                                        com.google.gson.JsonArray mensajesJson = (com.google.gson.JsonArray) historyData.get("mensajes");
-                                        if (mensajesJson != null && mensajesJson.size() > 0) {
-                                            logger.info("Recibidos {} mensajes de historial de canal remoto {} para usuario {}", 
-                                                mensajesJson.size(), idCanalFinal, idUsuarioFinal);
-                                            
-                                            for (com.google.gson.JsonElement elem : mensajesJson) {
-                                                try {
-                                                    com.google.gson.JsonObject msgRemoto = elem.getAsJsonObject();
-                                                    
-                                                    // Extraer datos del mensaje
-                                                    int idEmisor = msgRemoto.has("idEmisor") ? msgRemoto.get("idEmisor").getAsInt() : 0;
-                                                    String contenido = msgRemoto.has("contenido") ? msgRemoto.get("contenido").getAsString() : "";
-                                                    String tipoMensaje = msgRemoto.has("tipoMensaje") ? msgRemoto.get("tipoMensaje").getAsString() : "TEXT";
-                                                    String transcripcion = msgRemoto.has("transcripcion") ? msgRemoto.get("transcripcion").getAsString() : "";
-                                                    
-                                                    // IMPORTANTE: Verificar si el mensaje ya existe antes de guardarlo
-                                                    if (!mensajeService.mensajeExiste(idEmisor, 0, idCanalFinal, contenido)) {
-                                                        // Guardar en BD local
-                                                        if ("AUDIO".equals(tipoMensaje)) {
-                                                            mensajeService.registrarMensajeAudio(idEmisor, 0, idCanalFinal, "", transcripcion);
-                                                        } else {
-                                                            mensajeService.registrarMensajeTexto(idEmisor, 0, idCanalFinal, contenido);
-                                                        }
-                                                        logger.debug("Mensaje de canal remoto guardado: emisor={}, canal={}", idEmisor, idCanalFinal);
-                                                    }
-                                                    
-                                                    // Construir mensaje para enviar al cliente
-                                                    JsonObject o = new JsonObject();
-                                                    if (msgRemoto.has("id")) o.addProperty("id", msgRemoto.get("id").getAsInt());
-                                                    o.addProperty("idEmisor", idEmisor);
-                                                    o.addProperty("idCanal", idCanalFinal);
-                                                    if (msgRemoto.has("contenido")) o.addProperty("contenido", contenido);
-                                                    if (msgRemoto.has("fecha")) o.addProperty("fecha", msgRemoto.get("fecha").getAsString());
-                                                    if (msgRemoto.has("transcripcion")) o.addProperty("transcripcion", transcripcion);
-                                                    
-                                                    // Enviar al cliente
-                                                    if ("AUDIO".equals(tipoMensaje)) {
-                                                        enviarAUsuario(idUsuarioFinal, new Mensaje(TipoMensaje.MENSAJE_AUDIO, idEmisor, o.toString()));
-                                                    } else {
-                                                        enviarAUsuario(idUsuarioFinal, new Mensaje(TipoMensaje.MENSAJE_TEXTO, idEmisor, o.toString()));
-                                                    }
-                                                } catch (Exception ex) {
-                                                    logger.warn("Error procesando mensaje de historial de canal remoto: {}", ex.getMessage());
-                                                }
-                                            }
-                                            logger.info("Historial de canal remoto {} guardado y enviado a usuario {}", idCanalFinal, idUsuarioFinal);
-                                        }
-                                        interServerService.clearChannelHistoryCache(idCanalFinal, idUsuarioFinal);
-                                    }
-                                } catch (Exception ex) {
-                                    logger.error("Error enviando historial de canal remoto: {}", ex.getMessage());
-                                } finally {
-                                    scheduler.shutdown();
-                                }
-                            }, 1500, java.util.concurrent.TimeUnit.MILLISECONDS);
-                        }
-                        
-                        respuesta.addProperty("exito", true);
-                        respuesta.addProperty("mensaje", "Te has unido al canal remoto exitosamente");
-                        try {
-                            mensajeService.registrarEvento("CANAL_REMOTO_ACEPTADO", "Usuario " + idUsuario + " aceptó invitación a canal remoto " + idCanal, idUsuario, null);
-                        } catch (Exception ignored) {}
-                    } else {
-                        // Canal local
-                        logger.info("✓ Procesando aceptación de canal LOCAL");
-                        canalService.aceptarSolicitud(idCanal, idUsuario);
-                        logger.info("✓ Usuario {} aceptado en canal local {}", idUsuario, idCanal);
-                        
-                        // Verificar que se agregó correctamente
-                        var miembros = canalService.obtenerMiembrosAceptadosConServidor(idCanal);
-                        logger.info("✓ Total de miembros aceptados después de aceptación: {}", miembros.size());
-                        for (var m : miembros) {
-                            logger.info("  - Miembro: ID={} {}", m.getIdUsuario(), m.esLocal() ? "(LOCAL)" : "(REMOTO)");
-                        }
-                        
-                        respuesta.addProperty("exito", true);
-                        respuesta.addProperty("mensaje", "Te has unido al canal exitosamente");
-                        try {
-                            mensajeService.registrarEvento("INVITACION_ACEPTADA", "Usuario " + idUsuario + " aceptó invitación a canal " + idCanal, idUsuario, idCanal);
-                        } catch (Exception ignored) {}
-                        if (listener != null) {
-                            listener.onCanalesChanged();
-                            listener.onCanalMiembrosChanged(idCanal);
-                            listener.onLogsChanged();
-                        }
-                    }
+                    canalService.aceptarSolicitud(idCanal, idUsuario);
+                    respuesta.addProperty("exito", true);
+                    respuesta.addProperty("mensaje", "Te has unido al canal exitosamente");
+                    try { mensajeService.registrarEvento("INVITACION_ACEPTADA", "Usuario " + idUsuario + " aceptó invitación a canal " + idCanal, idUsuario, idCanal); } catch (Exception ignored) {}
+                    if (listener != null) { listener.onCanalesChanged(); listener.onCanalMiembrosChanged(idCanal); listener.onLogsChanged(); }
                 } else {
                     // Rechazar: eliminar la relación pendiente
                     try {
@@ -1558,107 +1101,23 @@ public class ServidorTCPIntegrado {
             int idCanal = datos.get("idCanal").getAsInt();
             String contenido = datos.get("contenido").getAsString();
 
-            logger.info("╔═══════════════════════════════════════════════════════════════");
-            logger.info("║ TRAZABILIDAD MENSAJE CANAL");
-            logger.info("╠═══════════════════════════════════════════════════════════════");
-            logger.info("║ Canal ID: {}", idCanal);
-            logger.info("║ Emisor ID: {}", idUsuario);
-            logger.info("║ Contenido: '{}'", contenido);
-            logger.info("╚═══════════════════════════════════════════════════════════════");
-
             // Registrar en log
             mensajeService.registrarMensajeTexto(idUsuario, 0, idCanal, contenido);
             if (listener != null) listener.onLogsChanged();
-            logger.info("✓ Mensaje guardado en BD local");
             
-            // Obtener información del emisor para mensajes P2P
-            var emisor = usuarioService.obtenerUsuarioPorId(idUsuario);
-            String nombreEmisor = emisor != null ? emisor.getNombreUsuario() : ("user-" + idUsuario);
-            logger.info("✓ Emisor: {} (ID: {})", nombreEmisor, idUsuario);
-            
-            // Obtener todos los miembros del canal con información del servidor
-            var miembrosConServidor = canalService.obtenerMiembrosAceptadosConServidor(idCanal);
-            logger.info("✓ Total de miembros aceptados en canal: {}", miembrosConServidor.size());
-            
-            // Listar todos los miembros
-            logger.info("╔═══════════════════════════════════════════════════════════════");
-            logger.info("║ MIEMBROS DEL CANAL {}:", idCanal);
-            logger.info("╠═══════════════════════════════════════════════════════════════");
-            for (var miembro : miembrosConServidor) {
-                if (miembro.esLocal()) {
-                    logger.info("║  → Usuario LOCAL: ID={}", miembro.getIdUsuario());
-                } else {
-                    logger.info("║  → Usuario REMOTO: ID={} en servidor {}:{}", 
-                        miembro.getIdUsuario(), miembro.getServidorHost(), miembro.getServidorPuerto());
-                }
-            }
-            logger.info("╚═══════════════════════════════════════════════════════════════");
-            
-            // Preparar mensaje para miembros locales
+            // Enviar a todos los miembros del canal
+            var miembros = canalService.obtenerMiembrosCanal(idCanal);
             JsonObject mensajeReenvio = new JsonObject();
             mensajeReenvio.addProperty("idEmisor", idUsuario);
             mensajeReenvio.addProperty("idCanal", idCanal);
             mensajeReenvio.addProperty("contenido", contenido);
             
             Mensaje mensajeCanal = new Mensaje(TipoMensaje.MENSAJE_CANAL, idUsuario, mensajeReenvio.toString());
-            
-            // Agrupar servidores remotos para evitar múltiples envíos al mismo servidor
-            java.util.Set<String> servidoresRemotosNotificados = new java.util.HashSet<>();
-            int localesEnviados = 0;
-            int remotosEnviados = 0;
-            
-            logger.info("╔═══════════════════════════════════════════════════════════════");
-            logger.info("║ DISTRIBUCIÓN DEL MENSAJE");
-            logger.info("╠═══════════════════════════════════════════════════════════════");
-            
-            for (var miembro : miembrosConServidor) {
-                if (miembro.getIdUsuario() == idUsuario) {
-                    // No enviar al emisor
-                    logger.info("║  ⊗ OMITIDO (emisor): Usuario ID={}", miembro.getIdUsuario());
-                    continue;
-                }
-                
-                if (miembro.esLocal()) {
-                    // Usuario local: enviar directamente
-                    logger.info("║  ✉ ENVIANDO LOCAL: Usuario ID={}", miembro.getIdUsuario());
-                    enviarAUsuario(miembro.getIdUsuario(), mensajeCanal);
-                    localesEnviados++;
-                } else {
-                    // Usuario remoto: reenviar a su servidor via P2P
-                    String servidorKey = miembro.getServidorHost() + ":" + miembro.getServidorPuerto();
-                    if (!servidoresRemotosNotificados.contains(servidorKey)) {
-                        if (interServerService != null) {
-                            // CRÍTICO: Necesitamos el puerto P2P del servidor remoto
-                            // miembro.getServidorPuerto() devuelve el puerto TCP (8080, 8081)
-                            // pero forwardChannelMessage necesita el puerto P2P (9090, 9091)
-                            int puertoP2P = miembro.getServidorPuerto() + 1010; // TCP + 1010 = P2P
-                            logger.info("║  ✈ ENVIANDO P2P: Host={} Puerto TCP={} -> P2P={} (para usuario ID={})", 
-                                miembro.getServidorHost(), miembro.getServidorPuerto(), puertoP2P, miembro.getIdUsuario());
-                            interServerService.forwardChannelMessage(
-                                miembro.getServidorHost(), 
-                                puertoP2P,  // ← USAR PUERTO P2P, NO TCP
-                                idCanal, 
-                                idUsuario, 
-                                nombreEmisor, 
-                                contenido
-                            );
-                            servidoresRemotosNotificados.add(servidorKey);
-                            remotosEnviados++;
-                        } else {
-                            logger.warn("║  ✗ ERROR: InterServerService es NULL - no se puede enviar a servidor remoto");
-                        }
-                    } else {
-                        logger.info("║  ⊗ OMITIDO (ya enviado a servidor): Usuario ID={} en {}:{}", 
-                            miembro.getIdUsuario(), miembro.getServidorHost(), miembro.getServidorPuerto());
-                    }
+            for (int idMiembro : miembros) {
+                if (idMiembro != idUsuario) {
+                    enviarAUsuario(idMiembro, mensajeCanal);
                 }
             }
-            
-            logger.info("╠═══════════════════════════════════════════════════════════════");
-            logger.info("║ RESUMEN:");
-            logger.info("║  • Mensajes locales enviados: {}", localesEnviados);
-            logger.info("║  • Servidores remotos notificados: {}", remotosEnviados);
-            logger.info("╚═══════════════════════════════════════════════════════════════");
         }
 
         private void procesarSolicitudLista(Mensaje mensaje) throws IOException {
@@ -1713,75 +1172,13 @@ public class ServidorTCPIntegrado {
                     respuesta.add("datos", gson.toJsonTree(canales));
                 }
                 case "miembros_canal" -> {
-                    // Devolver miembros y pendientes de un canal específico con información del servidor
+                    // Devolver miembros y pendientes de un canal específico
                     int idCanal = datos.get("idCanal").getAsInt();
-                    
-                    logger.info("╔═══════════════════════════════════════════════════════════════");
-                    logger.info("║ SOLICITUD DE MIEMBROS DE CANAL");
-                    logger.info("╠═══════════════════════════════════════════════════════════════");
-                    logger.info("║ Canal ID: {}", idCanal);
-                    logger.info("║ Solicitante: Usuario ID={}", idUsuario);
-                    
-                    // Obtener miembros con información del servidor
-                    var miembrosConServidor = canalService.obtenerMiembrosConServidor(idCanal);
-                    logger.info("║ Total de miembros encontrados en BD: {}", miembrosConServidor.size());
-                    
-                    // Separar en miembros aceptados y pendientes
-                    com.google.gson.JsonArray miembrosArray = new com.google.gson.JsonArray();
-                    com.google.gson.JsonArray pendientesArray = new com.google.gson.JsonArray();
-                    
-                    logger.info("╠═══════════════════════════════════════════════════════════════");
-                    logger.info("║ PROCESANDO MIEMBROS:");
-                    
-                    for (var miembro : miembrosConServidor) {
-                        com.google.gson.JsonObject miembroJson = new com.google.gson.JsonObject();
-                        miembroJson.addProperty("idUsuario", miembro.getIdUsuario());
-                        miembroJson.addProperty("esLocal", miembro.esLocal());
-                        
-                        if (miembro.esRemoto()) {
-                            miembroJson.addProperty("servidorHost", miembro.getServidorHost());
-                            miembroJson.addProperty("servidorPuerto", miembro.getServidorPuerto());
-                            logger.info("║  → Usuario ID={} (REMOTO) en {}:{} - Estado: {}", 
-                                miembro.getIdUsuario(), 
-                                miembro.getServidorHost(), 
-                                miembro.getServidorPuerto(),
-                                miembro.isAceptado() ? "ACEPTADO" : "PENDIENTE");
-                        } else {
-                            // Obtener información adicional del usuario si es local
-                            var usuario = usuarioService.obtenerUsuarioPorId(miembro.getIdUsuario());
-                            if (usuario != null) {
-                                miembroJson.addProperty("nombreUsuario", usuario.getNombreUsuario());
-                                logger.info("║  → Usuario ID={} (LOCAL) {} - Estado: {}", 
-                                    miembro.getIdUsuario(), 
-                                    usuario.getNombreUsuario(),
-                                    miembro.isAceptado() ? "ACEPTADO" : "PENDIENTE");
-                            } else {
-                                logger.info("║  → Usuario ID={} (LOCAL) [nombre no disponible] - Estado: {}", 
-                                    miembro.getIdUsuario(),
-                                    miembro.isAceptado() ? "ACEPTADO" : "PENDIENTE");
-                            }
-                        }
-                        
-                        if (miembro.isAceptado()) {
-                            miembrosArray.add(miembroJson);
-                        } else {
-                            pendientesArray.add(miembroJson);
-                        }
-                    }
-                    
-                    logger.info("╠═══════════════════════════════════════════════════════════════");
-                    logger.info("║ RESUMEN:");
-                    logger.info("║  • Miembros aceptados: {}", miembrosArray.size());
-                    logger.info("║  • Miembros pendientes: {}", pendientesArray.size());
-                    logger.info("╠═══════════════════════════════════════════════════════════════");
-                    logger.info("║ JSON ENVIADO AL CLIENTE:");
-                    logger.info("║  Miembros aceptados: {}", miembrosArray.toString());
-                    logger.info("║  Miembros pendientes: {}", pendientesArray.toString());
-                    logger.info("╚═══════════════════════════════════════════════════════════════");
-                    
+                    var miembros = canalService.obtenerMiembrosCanal(idCanal);
+                    var pendientes = canalService.obtenerPendientesCanal(idCanal);
                     respuesta.addProperty("tipo", "miembros_canal");
-                    respuesta.add("miembros", miembrosArray);
-                    respuesta.add("pendientes", pendientesArray);
+                    respuesta.add("miembros", gson.toJsonTree(miembros));
+                    respuesta.add("pendientes", gson.toJsonTree(pendientes));
                 }
                 case "historial_usuario" -> {
                     // Devolver historial con audioData embebido cuando aplique

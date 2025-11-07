@@ -268,8 +268,8 @@ public class ChatView extends BorderPane {
                 try {
                     if (notificacion.has("tipo")) {
                         String tipo = notificacion.get("tipo").getAsString();
-                        if ("INVITACION_CANAL".equals(tipo) || "INVITACION_CANAL_REMOTO".equals(tipo)) {
-                            // Recibió invitación a un canal (local o remoto) - mostrar diálogo de aceptar/rechazar
+                        if ("INVITACION_CANAL".equals(tipo)) {
+                            // Recibió invitación a un canal - mostrar diálogo de aceptar/rechazar
                             Platform.runLater(() -> ChatView.this.mostrarDialogoInvitacion(notificacion));
                             return;
                         }
@@ -641,16 +641,9 @@ public class ChatView extends BorderPane {
             String nombreCanal = invitacion.has("nombreCanal") ? invitacion.get("nombreCanal").getAsString() : "Canal";
             String nombreInvitador = invitacion.has("nombreInvitador") ? invitacion.get("nombreInvitador").getAsString() : "Alguien";
             
-            // Verificar si es invitación remota
-            boolean esRemoto = invitacion.has("servidorHost") && invitacion.has("servidorP2pPort");
-            String servidorHost = esRemoto ? invitacion.get("servidorHost").getAsString() : null;
-            Integer servidorP2pPort = esRemoto ? invitacion.get("servidorP2pPort").getAsInt() : null;
-            int idCreador = invitacion.has("idCreador") ? invitacion.get("idCreador").getAsInt() : 0;
-            boolean esPrivado = invitacion.has("esPrivado") ? invitacion.get("esPrivado").getAsBoolean() : true;
-            
             Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-            alert.setTitle("Invitación a Canal" + (esRemoto ? " Remoto" : ""));
-            alert.setHeaderText("Has sido invitado a un canal" + (esRemoto ? " de otro servidor" : ""));
+            alert.setTitle("Invitación a Canal");
+            alert.setHeaderText("Has sido invitado a un canal");
             alert.setContentText(nombreInvitador + " te ha invitado a unirte al canal \"" + nombreCanal + "\".\n\n¿Deseas aceptar la invitación?");
             
             ButtonType btnAceptar = new ButtonType("Aceptar");
@@ -663,15 +656,10 @@ public class ChatView extends BorderPane {
                 
                 new Thread(() -> {
                     try {
-                        // Si es remoto, incluir metadatos del servidor en la respuesta
-                        if (esRemoto && aceptar) {
-                            svc.responderInvitacionCanalRemoto(idCanal, true, nombreCanal, idCreador, esPrivado, servidorHost, servidorP2pPort);
-                        } else {
-                            svc.responderInvitacionCanal(idCanal, aceptar);
-                        }
-                        
+                        var resultado = svc.responderInvitacionCanal(idCanal, aceptar).get();
                         Platform.runLater(() -> {
-                            String mensaje = aceptar ? "Te has unido al canal" + (esRemoto ? " remoto" : "") : "Invitación rechazada";
+                            String mensaje = resultado.has("mensaje") ? resultado.get("mensaje").getAsString() : 
+                                (aceptar ? "Te has unido al canal" : "Invitación rechazada");
                             statusLabel.setText(mensaje);
                             agregarMensajeSistema(mensaje);
                             if (aceptar) {
@@ -682,13 +670,13 @@ public class ChatView extends BorderPane {
                     } catch (Exception ex) {
                         Platform.runLater(() -> {
                             statusLabel.setText("Error al responder invitación");
-                            agregarMensajeSistema("[Error] No se pudo responder la invitación: " + ex.getMessage());
+                            agregarMensajeSistema("[Error] No se pudo responder la invitación");
                         });
                     }
                 }).start();
             });
         } catch (Exception e) {
-            agregarMensajeSistema("[Error] Error procesando invitación: " + e.getMessage());
+            agregarMensajeSistema("[Error] Error procesando invitación");
         }
     }
 
