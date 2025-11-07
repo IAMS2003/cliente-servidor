@@ -347,18 +347,7 @@ public class CanalDAO {
      * Incluye tanto usuarios locales como remotos.
      */
     public List<MiembroCanal> obtenerMiembrosConServidor(int idCanal) throws SQLException {
-        String sql = """
-            SELECT cu.id_usuario,
-                   cu.usuario_servidor_host,
-                   cu.usuario_servidor_puerto,
-                   cu.aceptado,
-                   u.nombre_usuario AS u_nombre,
-                   u.servidor_host AS u_servidor_host,
-                   u.servidor_puerto AS u_servidor_puerto
-            FROM canal_usuarios cu
-            LEFT JOIN usuarios u ON u.id = cu.id_usuario
-            WHERE cu.id_canal = ?
-        """;
+        String sql = "SELECT id_usuario, usuario_servidor_host, usuario_servidor_puerto, aceptado FROM canal_usuarios WHERE id_canal = ?";
         List<MiembroCanal> miembros = new ArrayList<>();
         
         logger.debug("Consultando miembros del canal {} en BD...", idCanal);
@@ -374,21 +363,15 @@ public class CanalDAO {
                 contador++;
                 MiembroCanal miembro = new MiembroCanal();
                 miembro.setIdUsuario(rs.getInt("id_usuario"));
-                miembro.setNombreUsuario(rs.getString("u_nombre"));
-                String host = rs.getString("usuario_servidor_host");
+                miembro.setServidorHost(rs.getString("usuario_servidor_host"));
                 Integer puerto = rs.getObject("usuario_servidor_puerto", Integer.class);
-                // Enriquecer con datos de usuarios si canal_usuarios no los tiene
-                if (host == null) host = rs.getString("u_servidor_host");
-                if (puerto == null) puerto = rs.getObject("u_servidor_puerto", Integer.class);
-                miembro.setServidorHost(host);
                 miembro.setServidorPuerto(puerto);
                 miembro.setAceptado(rs.getBoolean("aceptado"));
                 miembros.add(miembro);
                 
-                logger.debug("  [{}] Usuario ID={}, nombre={}, servidor={}:{}, aceptado={}", 
+                logger.debug("  [{}] Usuario ID={}, servidor={}:{}, aceptado={}", 
                     contador, 
                     miembro.getIdUsuario(),
-                    miembro.getNombreUsuario(),
                     miembro.getServidorHost() != null ? miembro.getServidorHost() : "NULL",
                     miembro.getServidorPuerto() != null ? miembro.getServidorPuerto() : "NULL",
                     miembro.isAceptado());
@@ -404,18 +387,7 @@ public class CanalDAO {
      * Obtener solo miembros aceptados de un canal con información del servidor.
      */
     public List<MiembroCanal> obtenerMiembrosAceptadosConServidor(int idCanal) throws SQLException {
-        String sql = """
-            SELECT cu.id_usuario,
-                   cu.usuario_servidor_host,
-                   cu.usuario_servidor_puerto,
-                   cu.aceptado,
-                   u.nombre_usuario AS u_nombre,
-                   u.servidor_host AS u_servidor_host,
-                   u.servidor_puerto AS u_servidor_puerto
-            FROM canal_usuarios cu
-            LEFT JOIN usuarios u ON u.id = cu.id_usuario
-            WHERE cu.id_canal = ? AND cu.aceptado = TRUE
-        """;
+        String sql = "SELECT id_usuario, usuario_servidor_host, usuario_servidor_puerto, aceptado FROM canal_usuarios WHERE id_canal = ? AND aceptado = TRUE";
         List<MiembroCanal> miembros = new ArrayList<>();
         
         try (Connection conn = conexionBD.getConexion();
@@ -427,12 +399,8 @@ public class CanalDAO {
             while (rs.next()) {
                 MiembroCanal miembro = new MiembroCanal();
                 miembro.setIdUsuario(rs.getInt("id_usuario"));
-                miembro.setNombreUsuario(rs.getString("u_nombre"));
-                String host = rs.getString("usuario_servidor_host");
+                miembro.setServidorHost(rs.getString("usuario_servidor_host"));
                 Integer puerto = rs.getObject("usuario_servidor_puerto", Integer.class);
-                if (host == null) host = rs.getString("u_servidor_host");
-                if (puerto == null) puerto = rs.getObject("u_servidor_puerto", Integer.class);
-                miembro.setServidorHost(host);
                 miembro.setServidorPuerto(puerto);
                 miembro.setAceptado(true);
                 miembros.add(miembro);
@@ -440,25 +408,6 @@ public class CanalDAO {
         }
         
         return miembros;
-    }
-
-    /**
-     * Reparar inconsistencias: actualizar id_usuario en canal_usuarios cuando se crea un usuario local
-     * para un miembro remoto previamente registrado con ID inexistente.
-     */
-    public int actualizarIdUsuarioEnCanal(int idCanal, int oldIdUsuario, String servidorHost, Integer servidorPuerto, int newIdUsuario) throws SQLException {
-        String sql = "UPDATE canal_usuarios SET id_usuario = ? WHERE id_canal = ? AND id_usuario = ? AND " +
-                     (servidorHost != null ? "usuario_servidor_host = ? AND usuario_servidor_puerto = ?" : "usuario_servidor_host IS NULL");
-        try (Connection conn = conexionBD.getConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, newIdUsuario);
-            ps.setInt(2, idCanal);
-            ps.setInt(3, oldIdUsuario);
-            if (servidorHost != null) {
-                ps.setString(4, servidorHost);
-                ps.setInt(5, servidorPuerto != null ? servidorPuerto : Types.INTEGER);
-            }
-            return ps.executeUpdate();
-        }
     }
 
     /**

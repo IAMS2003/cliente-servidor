@@ -1,0 +1,300 @@
+package com.universidad.chat.servidor.model;
+
+import com.universidad.chat.servidor.config.ConexionBD;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.sql.*;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * DAO para gestión de usuarios en el servidor.
+ * Aplica patrón DAO (Data Access Object).
+ */
+public class UsuarioDAO {
+    private static final Logger logger = LoggerFactory.getLogger(UsuarioDAO.class);
+    private final ConexionBD conexionBD;
+
+    public UsuarioDAO() {
+        this.conexionBD = ConexionBD.getInstancia();
+    }
+
+    /**
+     * Crear un nuevo usuario.
+     */
+    public int crear(Usuario usuario) throws SQLException {
+        String sql = "INSERT INTO usuarios (nombre_usuario, email, contrasena, foto, direccion_ip, servidor_host, servidor_puerto) VALUES (?, ?, ?, ?, ?, ?, ?)";
+        
+        try (Connection conn = conexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            
+            stmt.setString(1, usuario.getNombreUsuario());
+            stmt.setString(2, usuario.getEmail());
+            stmt.setString(3, usuario.getContrasena());
+            stmt.setString(4, usuario.getFoto());
+            stmt.setString(5, usuario.getDireccionIP());
+            stmt.setString(6, usuario.getServidorHost());
+            if (usuario.getServidorPuerto() == null) stmt.setNull(7, Types.INTEGER); else stmt.setInt(7, usuario.getServidorPuerto());
+            
+            int filasAfectadas = stmt.executeUpdate();
+            
+            if (filasAfectadas > 0) {
+                try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        int id = generatedKeys.getInt(1);
+                        usuario.setId(id);
+                        logger.info("Usuario creado: {}", usuario.getNombreUsuario());
+                        return id;
+                    }
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Obtener usuario por ID.
+     */
+    public Usuario obtenerPorId(int id) throws SQLException {
+        String sql = "SELECT * FROM usuarios WHERE id = ?";
+        
+        try (Connection conn = conexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setInt(1, id);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return mapearUsuario(rs);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Obtener usuario por nombre de usuario.
+     */
+    public Usuario obtenerPorNombre(String nombreUsuario) throws SQLException {
+        String sql = "SELECT * FROM usuarios WHERE nombre_usuario = ?";
+        
+        try (Connection conn = conexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, nombreUsuario);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return mapearUsuario(rs);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Obtener todos los usuarios registrados.
+     */
+    public List<Usuario> obtenerTodos() throws SQLException {
+        String sql = "SELECT * FROM usuarios ORDER BY nombre_usuario";
+        List<Usuario> usuarios = new ArrayList<>();
+        
+        try (Connection conn = conexionBD.getConexion();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            
+            while (rs.next()) {
+                usuarios.add(mapearUsuario(rs));
+            }
+        }
+        
+        return usuarios;
+    }
+
+    /**
+     * Obtener usuarios conectados.
+     */
+    public List<Usuario> obtenerConectados() throws SQLException {
+        String sql = "SELECT * FROM usuarios WHERE conectado = TRUE ORDER BY nombre_usuario";
+        List<Usuario> usuarios = new ArrayList<>();
+        
+        try (Connection conn = conexionBD.getConexion();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            
+            while (rs.next()) {
+                usuarios.add(mapearUsuario(rs));
+            }
+        }
+        
+        return usuarios;
+    }
+
+    /**
+     * Actualizar estado de conexión del usuario.
+     */
+    public void actualizarEstadoConexion(int id, boolean conectado, String direccionIP) throws SQLException {
+        String sql = "UPDATE usuarios SET conectado = ?, direccion_ip = ? WHERE id = ?";
+        
+        try (Connection conn = conexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setBoolean(1, conectado);
+            stmt.setString(2, direccionIP);
+            stmt.setInt(3, id);
+            stmt.executeUpdate();
+            
+            logger.info("Estado de conexión actualizado para usuario ID: {}", id);
+        }
+    }
+
+    /**
+     * Autenticar usuario.
+     */
+    public Usuario autenticar(String nombreUsuario, String contrasena) throws SQLException {
+        String sql = "SELECT * FROM usuarios WHERE nombre_usuario = ? AND contrasena = ?";
+        
+        try (Connection conn = conexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setString(1, nombreUsuario);
+            stmt.setString(2, contrasena);
+            ResultSet rs = stmt.executeQuery();
+            
+            if (rs.next()) {
+                return mapearUsuario(rs);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Eliminar usuario.
+     */
+    public boolean eliminar(int id) throws SQLException {
+        String sql = "DELETE FROM usuarios WHERE id = ?";
+        
+        try (Connection conn = conexionBD.getConexion();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            
+            stmt.setInt(1, id);
+            int filasAfectadas = stmt.executeUpdate();
+            
+            if (filasAfectadas > 0) {
+                logger.info("Usuario eliminado ID: {}", id);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Mapear ResultSet a objeto Usuario.
+     */
+    private Usuario mapearUsuario(ResultSet rs) throws SQLException {
+        Usuario usuario = new Usuario();
+        usuario.setId(rs.getInt("id"));
+        usuario.setNombreUsuario(rs.getString("nombre_usuario"));
+        usuario.setEmail(rs.getString("email"));
+        usuario.setContrasena(rs.getString("contrasena"));
+        usuario.setFoto(rs.getString("foto"));
+        usuario.setDireccionIP(rs.getString("direccion_ip"));
+        try { usuario.setServidorHost(getNullableString(rs, "servidor_host")); } catch (SQLException ignored) {}
+        try { usuario.setServidorPuerto(getNullableInt(rs, "servidor_puerto")); } catch (SQLException ignored) {}
+        usuario.setConectado(rs.getBoolean("conectado"));
+        usuario.setFechaRegistro(rs.getTimestamp("fecha_registro").toLocalDateTime());
+        return usuario;
+    }
+
+    public void asignarServidorSiNulo(int idUsuario, String host, Integer puerto) throws SQLException {
+        String sql = "UPDATE usuarios SET servidor_host = COALESCE(servidor_host, ?), servidor_puerto = COALESCE(servidor_puerto, ?) WHERE id = ?";
+        try (Connection conn = conexionBD.getConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, host);
+            if (puerto == null) ps.setNull(2, Types.INTEGER); else ps.setInt(2, puerto);
+            ps.setInt(3, idUsuario);
+            ps.executeUpdate();
+        }
+    }
+
+    private String getNullableString(ResultSet rs, String col) throws SQLException {
+        try { return rs.getString(col); } catch (SQLException e) { return null; }
+    }
+    private Integer getNullableInt(ResultSet rs, String col) throws SQLException {
+        try {
+            int v = rs.getInt(col);
+            if (rs.wasNull()) return null;
+            return v;
+        } catch (SQLException e) { return null; }
+    }
+
+    /**
+     * Buscar usuario por nombre y servidor (host+puerto) para evitar duplicados de usuarios remotos.
+     */
+    public Usuario obtenerPorNombreYServidor(String nombreUsuario, String servidorHost, int servidorPuerto) throws SQLException {
+        String sql = "SELECT * FROM usuarios WHERE nombre_usuario = ? AND servidor_host = ? AND servidor_puerto = ?";
+        try (Connection conn = conexionBD.getConexion(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, nombreUsuario);
+            ps.setString(2, servidorHost);
+            ps.setInt(3, servidorPuerto);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return mapearUsuario(rs);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Crear (o recuperar) un usuario remoto que proviene de otro servidor.
+     * Intenta respetar el id remoto; si colisiona, crea uno nuevo y reporta el mapeo.
+     * @param remoteId ID del usuario en el servidor remoto (puede ignorarse si hay colisión)
+     * @return ID local del usuario creado o existente
+     */
+    public int crearRemotoSiNoExiste(int remoteId, String nombreUsuario, String servidorHost, int servidorPuerto) throws SQLException {
+        // 1. Buscar por nombre + servidor
+        Usuario existente = obtenerPorNombreYServidor(nombreUsuario, servidorHost, servidorPuerto);
+        if (existente != null) {
+            logger.debug("Usuario remoto ya existe localmente: {} idLocal={} host={} puerto={}", nombreUsuario, existente.getId(), servidorHost, servidorPuerto);
+            return existente.getId();
+        }
+
+        // 2. Intentar insertar manteniendo el ID remoto (solo si no existe ya ese ID)
+        boolean idDisponible = obtenerPorId(remoteId) == null;
+        String emailFake = nombreUsuario + "@" + servidorHost; // email sintético para cumplir UNIQUE
+        String sqlInsertConId = "INSERT INTO usuarios (id, nombre_usuario, email, contrasena, foto, direccion_ip, servidor_host, servidor_puerto, conectado) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, FALSE)";
+        String sqlInsertAuto = "INSERT INTO usuarios (nombre_usuario, email, contrasena, foto, direccion_ip, servidor_host, servidor_puerto, conectado) VALUES (?, ?, ?, NULL, NULL, ?, ?, FALSE)";
+
+        if (idDisponible) {
+            try (Connection conn = conexionBD.getConexion(); PreparedStatement ps = conn.prepareStatement(sqlInsertConId)) {
+                ps.setInt(1, remoteId);
+                ps.setString(2, nombreUsuario);
+                ps.setString(3, emailFake);
+                ps.setString(4, "*REMOTE*");
+                ps.setString(5, servidorHost);
+                ps.setInt(6, servidorPuerto);
+                ps.executeUpdate();
+                logger.info("Usuario remoto creado con ID preservado {}: {}@{}:{}", remoteId, nombreUsuario, servidorHost, servidorPuerto);
+                return remoteId;
+            } catch (SQLException ex) {
+                logger.warn("No se pudo insertar usuario remoto con ID {} ({}). Se intentará sin ID: {}", remoteId, nombreUsuario, ex.getMessage());
+            }
+        }
+
+        // 3. Insertar con auto-increment si preservación de ID falla o no disponible
+        try (Connection conn = conexionBD.getConexion(); PreparedStatement ps = conn.prepareStatement(sqlInsertAuto, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setString(1, nombreUsuario);
+            ps.setString(2, emailFake);
+            ps.setString(3, "*REMOTE*");
+            ps.setString(4, servidorHost);
+            ps.setInt(5, servidorPuerto);
+            ps.executeUpdate();
+            try (ResultSet rs = ps.getGeneratedKeys()) {
+                if (rs.next()) {
+                    int nuevoId = rs.getInt(1);
+                    logger.info("Usuario remoto creado con nuevo ID local {} (remoteId={} nombre={} servidor={}:{})", nuevoId, remoteId, nombreUsuario, servidorHost, servidorPuerto);
+                    return nuevoId;
+                }
+            }
+        }
+        logger.error("Fallo creación de usuario remoto nombre={} servidor={}:{}", nombreUsuario, servidorHost, servidorPuerto);
+        return -1;
+    }
+}

@@ -1734,51 +1734,39 @@ public class ServidorTCPIntegrado {
                     logger.info("║ PROCESANDO MIEMBROS:");
                     
                     for (var miembro : miembrosConServidor) {
-                        // Reparación on-the-fly: si el usuario no existe en 'usuarios' pero hay info de servidor, crearlo y re-mapear relación
-                        try {
-                            var usr = usuarioService.obtenerUsuarioPorId(miembro.getIdUsuario());
-                            if (usr == null && miembro.esRemoto() && miembro.getServidorHost() != null && miembro.getServidorPuerto() != null) {
-                                String nombrePlaceholder = miembro.getNombreUsuario() != null ? miembro.getNombreUsuario() :
-                                    ("remote-" + miembro.getIdUsuario() + "@" + miembro.getServidorHost());
-                                int nuevoId = usuarioService.obtenerOCrearUsuarioRemoto(miembro.getIdUsuario(), nombrePlaceholder, miembro.getServidorHost(), miembro.getServidorPuerto());
-                                if (nuevoId > 0 && nuevoId != miembro.getIdUsuario()) {
-                                    int updated = canalService.repararMiembroIdUsuario(idCanal, miembro.getIdUsuario(), miembro.getServidorHost(), miembro.getServidorPuerto(), nuevoId);
-                                    if (updated > 0) {
-                                        logger.info("Reparado id_usuario en canal_usuarios: {} -> {} para {}:{} en canal {}", miembro.getIdUsuario(), nuevoId, miembro.getServidorHost(), miembro.getServidorPuerto(), idCanal);
-                                        miembro.setIdUsuario(nuevoId);
-                                    }
-                                }
-                            }
-                        } catch (Exception fixEx) {
-                            logger.warn("No se pudo reparar miembro remoto ausente en usuarios: {}", fixEx.getMessage());
-                        }
                         com.google.gson.JsonObject miembroJson = new com.google.gson.JsonObject();
                         miembroJson.addProperty("idUsuario", miembro.getIdUsuario());
                         miembroJson.addProperty("esLocal", miembro.esLocal());
-                        if (miembro.getNombreUsuario() != null) {
-                            miembroJson.addProperty("nombreUsuario", miembro.getNombreUsuario());
-                        }
-
+                        
                         if (miembro.esRemoto()) {
                             miembroJson.addProperty("servidorHost", miembro.getServidorHost());
                             miembroJson.addProperty("servidorPuerto", miembro.getServidorPuerto());
-                            logger.info("║  → Usuario ID={} nombre='{}' (REMOTO) en {}:{} - Estado: {}", 
+                            logger.info("║  → Usuario ID={} (REMOTO) en {}:{} - Estado: {}", 
                                 miembro.getIdUsuario(), 
-                                miembro.getNombreUsuario(),
                                 miembro.getServidorHost(), 
                                 miembro.getServidorPuerto(),
                                 miembro.isAceptado() ? "ACEPTADO" : "PENDIENTE");
                         } else {
+                            // Obtener información adicional del usuario si es local
                             var usuario = usuarioService.obtenerUsuarioPorId(miembro.getIdUsuario());
-                            String nombreLocal = usuario != null ? usuario.getNombreUsuario() : miembro.getNombreUsuario();
-                            if (nombreLocal != null) miembroJson.addProperty("nombreUsuario", nombreLocal);
-                            logger.info("║  → Usuario ID={} (LOCAL) {} - Estado: {}", 
-                                miembro.getIdUsuario(), 
-                                nombreLocal != null ? nombreLocal : "[sin nombre]",
-                                miembro.isAceptado() ? "ACEPTADO" : "PENDIENTE");
+                            if (usuario != null) {
+                                miembroJson.addProperty("nombreUsuario", usuario.getNombreUsuario());
+                                logger.info("║  → Usuario ID={} (LOCAL) {} - Estado: {}", 
+                                    miembro.getIdUsuario(), 
+                                    usuario.getNombreUsuario(),
+                                    miembro.isAceptado() ? "ACEPTADO" : "PENDIENTE");
+                            } else {
+                                logger.info("║  → Usuario ID={} (LOCAL) [nombre no disponible] - Estado: {}", 
+                                    miembro.getIdUsuario(),
+                                    miembro.isAceptado() ? "ACEPTADO" : "PENDIENTE");
+                            }
                         }
-
-                        if (miembro.isAceptado()) miembrosArray.add(miembroJson); else pendientesArray.add(miembroJson);
+                        
+                        if (miembro.isAceptado()) {
+                            miembrosArray.add(miembroJson);
+                        } else {
+                            pendientesArray.add(miembroJson);
+                        }
                     }
                     
                     logger.info("╠═══════════════════════════════════════════════════════════════");

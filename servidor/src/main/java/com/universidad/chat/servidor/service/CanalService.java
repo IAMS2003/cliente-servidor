@@ -171,18 +171,6 @@ public class CanalService {
     }
 
     /**
-     * Reparar id_usuario en canal_usuarios para un miembro (cuando se creó/ubicó el usuario local correspondiente).
-     */
-    public int repararMiembroIdUsuario(int idCanal, int oldIdUsuario, String servidorHost, Integer servidorPuerto, int newIdUsuario) {
-        try {
-            return canalDAO.actualizarIdUsuarioEnCanal(idCanal, oldIdUsuario, servidorHost, servidorPuerto, newIdUsuario);
-        } catch (SQLException e) {
-            logger.error("Error reparando id_usuario en canal_usuarios", e);
-            return 0;
-        }
-    }
-
-    /**
      * Obtener usuarios con invitación pendiente de un canal.
      */
     public List<Integer> obtenerPendientesCanal(int idCanal) {

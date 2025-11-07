@@ -6,7 +6,6 @@ package com.universidad.chat.servidor.model;
  */
 public class MiembroCanal {
     private int idUsuario;
-    private String nombreUsuario; // opcional, enriquecido desde tabla usuarios
     private String servidorHost;  // null si es usuario local
     private Integer servidorPuerto; // null si es usuario local
     private boolean aceptado;
@@ -28,9 +27,6 @@ public class MiembroCanal {
     public void setIdUsuario(int idUsuario) {
         this.idUsuario = idUsuario;
     }
-
-    public String getNombreUsuario() { return nombreUsuario; }
-    public void setNombreUsuario(String nombreUsuario) { this.nombreUsuario = nombreUsuario; }
 
     public String getServidorHost() {
         return servidorHost;
@@ -73,9 +69,9 @@ public class MiembroCanal {
     @Override
     public String toString() {
         if (esLocal()) {
-            return "MiembroCanal{idUsuario=" + idUsuario + ", nombre=" + (nombreUsuario!=null?nombreUsuario:"?") + ", local, aceptado=" + aceptado + "}";
+            return "MiembroCanal{idUsuario=" + idUsuario + ", local, aceptado=" + aceptado + "}";
         } else {
-            return "MiembroCanal{idUsuario=" + idUsuario + ", nombre=" + (nombreUsuario!=null?nombreUsuario:"?") + ", servidor=" + servidorHost + ":" + servidorPuerto + ", aceptado=" + aceptado + "}";
+            return "MiembroCanal{idUsuario=" + idUsuario + ", servidor=" + servidorHost + ":" + servidorPuerto + ", aceptado=" + aceptado + "}";
         }
     }
 }
