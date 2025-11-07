@@ -8,8 +8,6 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.Base64;
@@ -17,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.universidad.chat.servidor.util.reportes.PDFExporter;
 
 public class ServerDashboardView extends BorderPane {
-    private static final Logger logger = LoggerFactory.getLogger(ServerDashboardView.class);
+    
 
     private final ServidorAppIntegradoMainWrapper wrapper;
 
@@ -27,6 +25,7 @@ public class ServerDashboardView extends BorderPane {
     private final AtomicInteger conectados = new AtomicInteger(0);
     private final TabPane tabs = new TabPane();
     private TableView<com.universidad.chat.servidor.model.Usuario> usuariosTable;
+    private javafx.animation.Timeline usuariosAutoRefresh;
     private String fotoBase64Sel;
     // Tab Informes: referencias para refresco en vivo
     private TableView<com.universidad.chat.servidor.model.Usuario> tvUsuariosInf;
@@ -35,6 +34,8 @@ public class ServerDashboardView extends BorderPane {
     private TableView<com.universidad.chat.servidor.model.Usuario> tvMiembrosInf;
     private TableView<com.universidad.chat.servidor.model.MensajeLog> tvAudioInf;
     private TableView<com.universidad.chat.servidor.model.MensajeLog> tvLogsInf;
+    private TableView<com.universidad.chat.servidor.p2p.PeerStatus> tvPeers;
+    private javafx.animation.Timeline peersAutoRefresh;
 
     public ServerDashboardView(ServidorAppIntegradoMainWrapper wrapper) {
         this.wrapper = wrapper;
@@ -52,7 +53,7 @@ public class ServerDashboardView extends BorderPane {
         // Tabs center
         logArea.setEditable(false);
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-    tabs.getTabs().addAll(crearTabUsuarios(), crearTabRegistro(), crearTabBroadcast(), crearTabInformes(), crearTabLog());
+    tabs.getTabs().addAll(crearTabUsuarios(), crearTabRegistro(), crearTabBroadcast(), crearTabServidores(), crearTabInformes(), crearTabLog());
         setCenter(tabs);
 
         detenerBtn.setOnAction(e -> {
@@ -110,6 +111,87 @@ public class ServerDashboardView extends BorderPane {
         refreshUsuarios();
     }
 
+    private Tab crearTabServidores() {
+        Tab t = new Tab("Servidores");
+        // Tabla de peers
+        TableColumn<com.universidad.chat.servidor.p2p.PeerStatus, String> pHost = new TableColumn<>("Host");
+        pHost.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getHost()));
+        TableColumn<com.universidad.chat.servidor.p2p.PeerStatus, Number> pPort = new TableColumn<>("P2P Puerto");
+        pPort.setCellValueFactory(c -> new javafx.beans.property.SimpleIntegerProperty(c.getValue().getPort()));
+        TableColumn<com.universidad.chat.servidor.p2p.PeerStatus, String> pEstado = new TableColumn<>("Estado");
+        pEstado.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(c.getValue().getEstado()));
+        TableColumn<com.universidad.chat.servidor.p2p.PeerStatus, String> pLast = new TableColumn<>("Último visto");
+        pLast.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(
+            c.getValue().getLastSeen() == null ? "-" : c.getValue().getLastSeen().toString()
+        ));
+        tvPeers = new TableView<>();
+        tvPeers.getColumns().add(pHost);
+        tvPeers.getColumns().add(pPort);
+        tvPeers.getColumns().add(pEstado);
+        tvPeers.getColumns().add(pLast);
+
+        Button refPeers = new Button("Refrescar");
+        Button anunciarPeers = new Button("Anunciar (HELLO)");
+        // Formulario para agregar servidor
+        TextField tfHost = new TextField(); tfHost.setPromptText("host o IP"); tfHost.setPrefColumnCount(12);
+        TextField tfPort = new TextField(); tfPort.setPromptText("puerto P2P"); tfPort.setPrefColumnCount(6);
+        CheckBox cbAnnounce = new CheckBox("Anunciar"); cbAnnounce.setSelected(true);
+        Button btnAddPeer = new Button("Agregar servidor");
+
+        refPeers.setOnAction(e -> refreshPeers());
+        anunciarPeers.setOnAction(e -> {
+            new Thread(() -> {
+                wrapper.anunciarServidores();
+                Platform.runLater(() -> appendLog("HELLO enviado a pares P2P"));
+            }, "announce-hello-bg").start();
+        });
+        btnAddPeer.setOnAction(e -> {
+            String h = tfHost.getText()!=null ? tfHost.getText().trim() : "";
+            String sp = tfPort.getText()!=null ? tfPort.getText().trim() : "";
+            int p;
+            try { p = Integer.parseInt(sp); } catch (Exception ex) { p = -1; }
+            if (h.isEmpty() || p <= 0) {
+                appendLog("Completa host y puerto válidos para registrar servidor");
+                return;
+            }
+            boolean ann = cbAnnounce.isSelected();
+            final String hVal = h;
+            final int pVal = p;
+            final boolean annVal = ann;
+            new Thread(() -> {
+                wrapper.registrarServidorPeer(hVal, pVal, annVal);
+                Platform.runLater(() -> {
+                    appendLog("Servidor registrado: " + hVal + ":" + pVal + (annVal?" (HELLO enviado)":""));
+                    refreshPeers();
+                });
+            }, "add-peer-bg").start();
+        });
+
+        VBox panePeers = new VBox(8,
+                new HBox(8, refPeers, anunciarPeers),
+                new HBox(8, new Label("Host:"), tfHost, new Label("Puerto:"), tfPort, cbAnnounce, btnAddPeer),
+                tvPeers
+        );
+        panePeers.setPadding(new Insets(8));
+        t.setContent(panePeers);
+
+        // Auto refresco (cada 2s mientras la pestaña está seleccionada)
+        peersAutoRefresh = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.seconds(2), ev -> refreshPeers())
+        );
+        peersAutoRefresh.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        t.setOnSelectionChanged(ev -> {
+            if (t.isSelected()) {
+                refreshPeers();
+                peersAutoRefresh.play();
+            } else {
+                peersAutoRefresh.stop();
+            }
+        });
+
+        return t;
+    }
+
     private Tab crearTabLog() {
         Tab t = new Tab("Log");
         t.setContent(logArea);
@@ -128,9 +210,18 @@ public class ServerDashboardView extends BorderPane {
             (c.getValue().getDireccionIP() != null ? c.getValue().getDireccionIP() : "") +
             (c.getValue().getPuertoConexion() != null ? (":" + c.getValue().getPuertoConexion()) : "")
         ));
+        TableColumn<com.universidad.chat.servidor.model.Usuario, String> colSrv = new TableColumn<>("Servidor");
+        colSrv.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(
+            (c.getValue().getServidorHost()!=null?c.getValue().getServidorHost():"-") +
+            ":" + (c.getValue().getServidorPuerto()!=null?c.getValue().getServidorPuerto():0)
+        ));
         TableColumn<com.universidad.chat.servidor.model.Usuario, Boolean> colCon = new TableColumn<>("Conectado");
         colCon.setCellValueFactory(c -> new javafx.beans.property.SimpleBooleanProperty(c.getValue().isConectado()));
-    usuariosTable.getColumns().addAll(colId, colUser, colIP, colCon);
+    usuariosTable.getColumns().add(colId);
+    usuariosTable.getColumns().add(colUser);
+    usuariosTable.getColumns().add(colIP);
+    usuariosTable.getColumns().add(colSrv);
+    usuariosTable.getColumns().add(colCon);
 
         Button refresh = new Button("Refrescar");
         Button kick = new Button("Desconectar");
@@ -143,6 +234,11 @@ public class ServerDashboardView extends BorderPane {
         kick.setOnAction(e -> {
             var selected = usuariosTable.getSelectionModel().getSelectedItem();
             if (selected != null) {
+                // Sólo podemos forzar desconexión de usuarios conectados a ESTE servidor (tienen puertoConexion)
+                if (selected.getPuertoConexion() == null) {
+                    ServerDashboardBus.appendLog("No se puede desconectar un usuario conectado en otro servidor: " + selected.getNombreUsuario());
+                    return;
+                }
                 ServerDashboardBus.appendLog("Solicitando desconexión de usuario " + selected.getId());
                 new Thread(() -> {
                     wrapper.forzarDesconexionUsuario(selected.getId());
@@ -152,6 +248,20 @@ public class ServerDashboardView extends BorderPane {
         });
 
         t.setContent(cont);
+
+        // Auto refresco mientras la pestaña esté visible (incluye remotos por P2P)
+        usuariosAutoRefresh = new javafx.animation.Timeline(
+                new javafx.animation.KeyFrame(javafx.util.Duration.seconds(2), ev -> refreshUsuarios())
+        );
+        usuariosAutoRefresh.setCycleCount(javafx.animation.Animation.INDEFINITE);
+        t.setOnSelectionChanged(ev -> {
+            if (t.isSelected()) {
+                refreshUsuarios();
+                usuariosAutoRefresh.play();
+            } else {
+                usuariosAutoRefresh.stop();
+            }
+        });
         return t;
     }
 
@@ -216,7 +326,11 @@ public class ServerDashboardView extends BorderPane {
                         status.setStyle("-fx-text-fill:#080;");
                         refreshUsuarios();
                     } else {
-                        status.setText("Error al registrar (posible duplicado)");
+                        String detalle;
+                        if (id == -2) detalle = "Nombre de usuario ya existe";
+                        else if (id == -3) detalle = "Email ya existe";
+                        else detalle = "Error de base de datos (ver logs)";
+                        status.setText("Error al registrar: " + detalle);
                         status.setStyle("-fx-text-fill:#c00;");
                     }
                 });
@@ -304,7 +418,7 @@ public class ServerDashboardView extends BorderPane {
     private Tab crearTabInformes() {
         Tab t = new Tab("Informes");
         TabPane subTabs = new TabPane();
-        subTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+    subTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
     // Usuarios Registrados
         TableColumn<com.universidad.chat.servidor.model.Usuario, Number> uId = new TableColumn<>("ID");
@@ -354,10 +468,16 @@ public class ServerDashboardView extends BorderPane {
             (c.getValue().getDireccionIP() != null ? c.getValue().getDireccionIP() : "") +
             (c.getValue().getPuertoConexion() != null ? (":" + c.getValue().getPuertoConexion()) : "")
         ));
+        TableColumn<com.universidad.chat.servidor.model.Usuario, String> cServ = new TableColumn<>("Servidor");
+        cServ.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(
+            (c.getValue().getServidorHost() != null ? c.getValue().getServidorHost() : "") +
+            (c.getValue().getServidorPuerto() != null ? (":" + c.getValue().getServidorPuerto()) : "")
+        ));
         tvConInf = new TableView<>();
     tvConInf.getColumns().add(cId);
     tvConInf.getColumns().add(cNom);
     tvConInf.getColumns().add(cIP);
+    tvConInf.getColumns().add(cServ);
         Button refCon = new Button("Refrescar");
         Button expCon = new Button("Exportar PDF");
         refCon.setOnAction(e -> refreshInformesConectados());
@@ -493,12 +613,18 @@ public class ServerDashboardView extends BorderPane {
         lRec.setCellValueFactory(c -> new javafx.beans.property.SimpleIntegerProperty(c.getValue().getIdReceptor()));
         TableColumn<com.universidad.chat.servidor.model.MensajeLog, Number> lCan = new TableColumn<>("Canal");
         lCan.setCellValueFactory(c -> new javafx.beans.property.SimpleIntegerProperty(c.getValue().getIdCanal() == null ? 0 : c.getValue().getIdCanal()));
+        TableColumn<com.universidad.chat.servidor.model.MensajeLog, String> lServ = new TableColumn<>("Servidor");
+        lServ.setCellValueFactory(c -> new javafx.beans.property.SimpleStringProperty(
+            (c.getValue().getServidorHost() != null ? c.getValue().getServidorHost() : "") +
+            (c.getValue().getServidorPuerto() != null ? (":" + c.getValue().getServidorPuerto()) : "")
+        ));
     tvLogsInf.getColumns().add(lId);
     tvLogsInf.getColumns().add(lTipo);
     tvLogsInf.getColumns().add(lCont);
     tvLogsInf.getColumns().add(lEm);
     tvLogsInf.getColumns().add(lRec);
     tvLogsInf.getColumns().add(lCan);
+    tvLogsInf.getColumns().add(lServ);
         Button refLogs = new Button("Refrescar");
         Button expLogs = new Button("Exportar PDF");
         refLogs.setOnAction(e -> refreshInformesLogs());
@@ -583,5 +709,13 @@ public class ServerDashboardView extends BorderPane {
             var datos = wrapper.listarLogs();
             Platform.runLater(() -> tvLogsInf.setItems(FXCollections.observableArrayList(datos)));
         }, "ref-logs-live").start();
+    }
+
+    private void refreshPeers() {
+        if (tvPeers == null) return;
+        new Thread(() -> {
+            var peers = wrapper.listarServidoresPares();
+            Platform.runLater(() -> tvPeers.setItems(FXCollections.observableArrayList(peers)));
+        }, "ref-peers-live").start();
     }
 }

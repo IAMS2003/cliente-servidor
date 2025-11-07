@@ -127,7 +127,7 @@ public class CanalService {
     }
 
     /**
-     * Obtener usuarios de un canal.
+     * Obtener usuarios de un canal (solo IDs).
      */
     public List<Integer> obtenerMiembrosCanal(int idCanal) {
         try {
@@ -135,6 +135,50 @@ public class CanalService {
         } catch (SQLException e) {
             logger.error("Error obteniendo miembros del canal", e);
             return List.of();
+        }
+    }
+
+    /**
+     * Alias para obtenerMiembrosCanal (compatibilidad).
+     */
+    public List<Integer> obtenerUsuariosCanal(int idCanal) {
+        return obtenerMiembrosCanal(idCanal);
+    }
+
+    /**
+     * Obtener miembros de un canal con información completa del servidor.
+     * Incluye tanto usuarios locales como remotos.
+     */
+    public List<com.universidad.chat.servidor.model.MiembroCanal> obtenerMiembrosConServidor(int idCanal) {
+        try {
+            return canalDAO.obtenerMiembrosConServidor(idCanal);
+        } catch (SQLException e) {
+            logger.error("Error obteniendo miembros con servidor del canal", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Obtener solo miembros aceptados con información del servidor.
+     */
+    public List<com.universidad.chat.servidor.model.MiembroCanal> obtenerMiembrosAceptadosConServidor(int idCanal) {
+        try {
+            return canalDAO.obtenerMiembrosAceptadosConServidor(idCanal);
+        } catch (SQLException e) {
+            logger.error("Error obteniendo miembros aceptados con servidor del canal", e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Reparar id_usuario en canal_usuarios para un miembro (cuando se creó/ubicó el usuario local correspondiente).
+     */
+    public int repararMiembroIdUsuario(int idCanal, int oldIdUsuario, String servidorHost, Integer servidorPuerto, int newIdUsuario) {
+        try {
+            return canalDAO.actualizarIdUsuarioEnCanal(idCanal, oldIdUsuario, servidorHost, servidorPuerto, newIdUsuario);
+        } catch (SQLException e) {
+            logger.error("Error reparando id_usuario en canal_usuarios", e);
+            return 0;
         }
     }
 
@@ -159,6 +203,63 @@ public class CanalService {
         } catch (SQLException e) {
             logger.error("Error obteniendo canal por ID", e);
             return null;
+        }
+    }
+
+    /**
+     * Registrar un canal remoto localmente y agregar al usuario como miembro aceptado.
+     * Útil cuando un usuario acepta una invitación a un canal de otro servidor.
+     * 
+     * @param idCanal ID del canal en el servidor remoto
+     * @param nombreCanal Nombre del canal
+     * @param idCreador ID del usuario creador en su servidor
+     * @param creadorServidorHost Host del servidor del creador
+     * @param creadorServidorPuerto Puerto del servidor del creador
+     * @param esPrivado Si el canal es privado
+     * @param idUsuario ID del usuario que se une al canal
+     * @param usuarioServidorHost Host del servidor del usuario (null si es local)
+     * @param usuarioServidorPuerto Puerto del servidor del usuario (null si es local)
+     */
+    public boolean registrarCanalRemotoYAgregarUsuario(int idCanal, String nombreCanal, 
+                                                       int idCreador, String creadorServidorHost, int creadorServidorPuerto,
+                                                       boolean esPrivado, 
+                                                       int idUsuario, String usuarioServidorHost, Integer usuarioServidorPuerto) {
+        try {
+            // Registrar el canal si no existe
+            canalDAO.registrarCanalRemoto(idCanal, nombreCanal, idCreador, creadorServidorHost, creadorServidorPuerto, esPrivado);
+            
+            // Agregar al usuario como miembro aceptado
+            canalDAO.agregarUsuarioAceptado(idCanal, idUsuario, usuarioServidorHost, usuarioServidorPuerto);
+            
+            if (usuarioServidorHost != null) {
+                logger.info("Canal remoto {} registrado y usuario remoto {}:{}:{} agregado como miembro", 
+                           idCanal, idUsuario, usuarioServidorHost, usuarioServidorPuerto);
+            } else {
+                logger.info("Canal remoto {} registrado y usuario local {} agregado como miembro", idCanal, idUsuario);
+            }
+            return true;
+        } catch (SQLException e) {
+            logger.error("Error registrando canal remoto", e);
+            return false;
+        }
+    }
+
+    /**
+     * Agregar un usuario como miembro aceptado directamente.
+     * Útil para cuando un usuario remoto acepta unirse a un canal local.
+     * 
+     * @param idCanal ID del canal
+     * @param idUsuario ID del usuario en su servidor
+     * @param usuarioServidorHost Host del servidor del usuario (null si es local)
+     * @param usuarioServidorPuerto Puerto del servidor del usuario (null si es local)
+     */
+    public void agregarUsuarioAceptadoDirecto(int idCanal, int idUsuario, String usuarioServidorHost, Integer usuarioServidorPuerto) throws SQLException {
+        canalDAO.agregarUsuarioAceptado(idCanal, idUsuario, usuarioServidorHost, usuarioServidorPuerto);
+        if (usuarioServidorHost != null) {
+            logger.info("Usuario remoto {}:{}:{} agregado como miembro aceptado del canal {}", 
+                       idUsuario, usuarioServidorHost, usuarioServidorPuerto, idCanal);
+        } else {
+            logger.info("Usuario local {} agregado como miembro aceptado del canal {}", idUsuario, idCanal);
         }
     }
 }

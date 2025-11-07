@@ -28,6 +28,7 @@ public class ClienteProtocoloService implements Closeable {
     private final Gson gson = new Gson();
     private final List<Waiter> waiters = java.util.Collections.synchronizedList(new LinkedList<>());
     private volatile Integer idUsuario;
+    private volatile String nombreUsuario;
     private volatile boolean conectado = false;
     public interface EventosCliente {
         void onServidorDetenido(String mensaje);
@@ -208,6 +209,9 @@ public class ClienteProtocoloService implements Closeable {
     }
 
     public Integer getIdUsuario() { return idUsuario; }
+    public String getNombreUsuario() { return nombreUsuario; }
+    public String getServidorHost() { return cliente != null ? cliente.getHost() : "localhost"; }
+    public int getServidorPort() { return cliente != null ? cliente.getPuerto() : -1; }
     public void setEventos(EventosCliente eventos) { this.eventos = eventos; }
 
     // ============ API de alto nivel ============
@@ -225,6 +229,11 @@ public class ClienteProtocoloService implements Closeable {
                 if (json.has("id")) {
                     idUsuario = json.get("id").getAsInt();
                 }
+                try {
+                    if (json.has("nombreUsuario") && !json.get("nombreUsuario").isJsonNull()) {
+                        this.nombreUsuario = json.get("nombreUsuario").getAsString();
+                    }
+                } catch (Exception ignored) {}
                 return json;
             });
         } catch (IOException e) {
@@ -276,6 +285,10 @@ public class ClienteProtocoloService implements Closeable {
             f.completeExceptionally(e);
             return f;
         }
+    }
+
+    public void responderInvitacionCanalRemoto(int idCanal, boolean aceptar, String nombreCanal, int idCreador, boolean esPrivado, String servidorHost, int servidorP2pPort) throws IOException {
+        cliente.responderInvitacionCanalRemoto(idCanal, aceptar, nombreCanal, idCreador, esPrivado, servidorHost, servidorP2pPort);
     }
 
     public CompletableFuture<JsonObject> solicitarLista(String tipo) {

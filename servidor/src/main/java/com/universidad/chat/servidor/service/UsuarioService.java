@@ -2,6 +2,7 @@ package com.universidad.chat.servidor.service;
 
 import com.universidad.chat.servidor.model.Usuario;
 import com.universidad.chat.servidor.model.UsuarioDAO;
+import com.universidad.chat.servidor.config.ServidorConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,9 +20,11 @@ import java.util.List;
 public class UsuarioService {
     private static final Logger logger = LoggerFactory.getLogger(UsuarioService.class);
     private final UsuarioDAO usuarioDAO;
+    private final ServidorConfig servidorConfig;
 
     public UsuarioService() {
-        this.usuarioDAO = new UsuarioDAO();
+    this.usuarioDAO = new UsuarioDAO();
+    this.servidorConfig = new ServidorConfig();
     }
 
     /**
@@ -34,7 +37,8 @@ public class UsuarioService {
             Usuario existente = usuarioDAO.obtenerPorNombre(nombreUsuario);
             if (existente != null) {
                 logger.warn("Intento de registro de usuario existente: {}", nombreUsuario);
-                return -1;
+                // -2: nombre de usuario duplicado
+                return -2;
             }
 
             // Guardar foto en disco si viene en Base64
@@ -57,6 +61,9 @@ public class UsuarioService {
 
             // Crear nuevo usuario
             Usuario nuevoUsuario = new Usuario(0, nombreUsuario, email, contrasena, fotoPath, direccionIP);
+            // Afinidad de servidor: asignar en registro
+            nuevoUsuario.setServidorHost(servidorConfig.getServerHost());
+            nuevoUsuario.setServidorPuerto(servidorConfig.getServerPort());
             int id = usuarioDAO.crear(nuevoUsuario);
             
             if (id > 0) {
@@ -65,9 +72,24 @@ public class UsuarioService {
             
             return id;
         } catch (SQLException e) {
-            logger.error("Error registrando usuario", e);
-            return -1;
+            // Diferenciar errores comunes (p. ej., duplicado de email por UNIQUE)
+            String sqlState = safeSqlState(e);
+            int vendorCode = safeVendorCode(e);
+            // MySQL: SQLState 23000 y errorCode 1062 = Duplicate entry
+            if ("23000".equals(sqlState) && vendorCode == 1062) {
+                logger.warn("Registro falló por restricción UNIQUE (posible email duplicado)");
+                return -3; // -3: email duplicado (u otra clave única)
+            }
+            logger.error("Error registrando usuario (SQLState={}, code={}): {}", sqlState, vendorCode, e.getMessage(), e);
+            return -4; // -4: error general de BD
         }
+    }
+
+    private String safeSqlState(SQLException e) {
+        try { return e.getSQLState(); } catch (Exception ex) { return null; }
+    }
+    private int safeVendorCode(SQLException e) {
+        try { return e.getErrorCode(); } catch (Exception ex) { return -1; }
     }
 
     /**
@@ -77,6 +99,23 @@ public class UsuarioService {
         try {
             Usuario usuario = usuarioDAO.autenticar(nombreUsuario, contrasena);
             if (usuario != null) {
+                // Verificar afinidad con este servidor
+                if (usuario.getServidorHost() == null || usuario.getServidorPuerto() == null) {
+                    try {
+                        usuarioDAO.asignarServidorSiNulo(usuario.getId(), servidorConfig.getServerHost(), servidorConfig.getServerPort());
+                        usuario.setServidorHost(servidorConfig.getServerHost());
+                        usuario.setServidorPuerto(servidorConfig.getServerPort());
+                        logger.info("Afinidad de servidor asignada a {}:{} para usuario {}", servidorConfig.getServerHost(), servidorConfig.getServerPort(), nombreUsuario);
+                    } catch (Exception ex) {
+                        logger.warn("No se pudo asignar afinidad de servidor para {}: {}", nombreUsuario, ex.getMessage());
+                    }
+                } else {
+                    boolean ok = servidorConfig.getServerHost().equals(usuario.getServidorHost()) && servidorConfig.getServerPort() == usuario.getServidorPuerto();
+                    if (!ok) {
+                        logger.warn("Inicio de sesión rechazado: usuario {} pertenece a servidor {}:{}", nombreUsuario, usuario.getServidorHost(), usuario.getServidorPuerto());
+                        return null;
+                    }
+                }
                 logger.info("Usuario autenticado: {}", nombreUsuario);
             } else {
                 logger.warn("Intento de autenticación fallido: {}", nombreUsuario);
@@ -149,6 +188,24 @@ public class UsuarioService {
         } catch (SQLException e) {
             logger.error("Error obteniendo usuario por ID", e);
             return null;
+        }
+    }
+
+    /**
+     * Obtener o crear un usuario remoto proveniente de otro servidor.
+     * Si ya existe por (nombre, servidorHost, servidorPuerto) se retorna su ID local.
+     * Si no existe, se crea intentando preservar el ID remoto cuando sea posible.
+     * Retorna el ID local.
+     */
+    public int obtenerOCrearUsuarioRemoto(int remoteId, String nombreUsuario, String servidorHost, int servidorPuerto) {
+        try {
+            int idLocal = usuarioDAO.crearRemotoSiNoExiste(remoteId, nombreUsuario, servidorHost, servidorPuerto);
+            if (idLocal > 0) return idLocal;
+            logger.error("No se pudo obtener/crear usuario remoto {}@{}:{} (remoteId={})", nombreUsuario, servidorHost, servidorPuerto, remoteId);
+            return -1;
+        } catch (SQLException e) {
+            logger.error("Error creando usuario remoto {}@{}:{}", nombreUsuario, servidorHost, servidorPuerto, e);
+            return -1;
         }
     }
 }

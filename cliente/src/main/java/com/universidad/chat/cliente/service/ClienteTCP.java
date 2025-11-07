@@ -18,6 +18,8 @@ public class ClienteTCP {
     private static final Logger logger = LoggerFactory.getLogger(ClienteTCP.class);
     private String host = "localhost";
     private int puerto = 8080;
+    public String getHost() { return host; }
+    public int getPuerto() { return puerto; }
 
     private Socket socket;
     private DataInputStream entrada;
@@ -117,9 +119,15 @@ public class ClienteTCP {
     }
 
     public void enviarMensajeTextoAUsuario(int idEmisor, int idReceptor, String contenido) throws IOException {
+        enviarMensajeTextoAUsuario(idEmisor, idReceptor, contenido, null, null);
+    }
+
+    public void enviarMensajeTextoAUsuario(int idEmisor, int idReceptor, String contenido, String servidorHost, Integer servidorP2pPort) throws IOException {
         JsonObject body = new JsonObject();
         body.addProperty("idReceptor", idReceptor);
         body.addProperty("contenido", contenido);
+        if (servidorHost != null && !servidorHost.isBlank()) body.addProperty("servidorHost", servidorHost);
+        if (servidorP2pPort != null && servidorP2pPort > 0) body.addProperty("servidorP2pPort", servidorP2pPort);
         enviarMensaje(new Mensaje(TipoMensaje.MENSAJE_TEXTO, idEmisor, body.toString()));
     }
 
@@ -161,6 +169,19 @@ public class ClienteTCP {
         enviarMensaje(new Mensaje(TipoMensaje.SOLICITUD_CANAL, 0, body.toString()));
     }
 
+    public void responderInvitacionCanalRemoto(int idCanal, boolean aceptar, String nombreCanal, int idCreador, boolean esPrivado, String servidorHost, int servidorP2pPort) throws IOException {
+        JsonObject body = new JsonObject();
+        body.addProperty("accion", "responder_invitacion");
+        body.addProperty("idCanal", idCanal);
+        body.addProperty("aceptar", aceptar);
+        body.addProperty("nombreCanal", nombreCanal);
+        body.addProperty("idCreador", idCreador);
+        body.addProperty("esPrivado", esPrivado);
+        body.addProperty("servidorHost", servidorHost);
+        body.addProperty("servidorP2pPort", servidorP2pPort);
+        enviarMensaje(new Mensaje(TipoMensaje.SOLICITUD_CANAL, 0, body.toString()));
+    }
+
     public void solicitarLista(String tipo) throws IOException {
         JsonObject body = new JsonObject();
         body.addProperty("tipo", tipo);
@@ -195,10 +216,16 @@ public class ClienteTCP {
     }
 
     public void enviarAudioAUsuario(int idEmisor, int idReceptor, byte[] audioData) throws IOException {
+        enviarAudioAUsuario(idEmisor, idReceptor, audioData, null, null);
+    }
+
+    public void enviarAudioAUsuario(int idEmisor, int idReceptor, byte[] audioData, String servidorHost, Integer servidorP2pPort) throws IOException {
         String audioBase64 = java.util.Base64.getEncoder().encodeToString(audioData);
         JsonObject body = new JsonObject();
         body.addProperty("idReceptor", idReceptor);
         body.addProperty("audioData", audioBase64);
+        if (servidorHost != null && !servidorHost.isBlank()) body.addProperty("servidorHost", servidorHost);
+        if (servidorP2pPort != null && servidorP2pPort > 0) body.addProperty("servidorP2pPort", servidorP2pPort);
         enviarMensaje(new Mensaje(TipoMensaje.MENSAJE_AUDIO, idEmisor, body.toString()));
     }
 

@@ -82,6 +82,12 @@ public class ServidorAppIntegradoMainWrapper {
         return servidor.obtenerMensajesAudioLogs();
     }
 
+    // P2P: exponer estado de servidores para la UI
+    public java.util.List<com.universidad.chat.servidor.p2p.PeerStatus> listarServidoresPares() {
+        if (servidor == null) return java.util.List.of();
+        return servidor.obtenerServidoresPares();
+    }
+
     public void forzarDesconexionUsuario(int idUsuario) {
         if (servidor != null) servidor.forzarDesconexionUsuario(idUsuario);
     }
@@ -101,5 +107,15 @@ public class ServidorAppIntegradoMainWrapper {
         if (servidor != null && contenido != null && !contenido.isBlank()) {
             servidor.broadcastATodosCanales(contenido);
         }
+    }
+
+    // P2P: anunciar manualmente a servidores (HELLO)
+    public void anunciarServidores() {
+        if (servidor != null) servidor.anunciarAServidores();
+    }
+
+    // P2P: registrar un servidor peer (y opcionalmente anunciar HELLO directo)
+    public void registrarServidorPeer(String host, int puerto, boolean anunciar) {
+        if (servidor != null) servidor.registrarServidorPeer(host, puerto, anunciar);
     }
 }

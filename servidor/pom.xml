@@ -69,6 +69,18 @@
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>com.universidad.chat.servidor.ui.ServidorUIApp</mainClass>
+                    <!-- Pasar system properties al proceso de la app -->
+                    <jvmArgs>
+                        -Dconfig.file=${config.file}
+                        -Dserver.host=${server.host}
+                        -Dserver.port=${server.port}
+                        -Dp2p.enabled=${p2p.enabled}
+                        -Dp2p.port=${p2p.port}
+                        -Dp2p.peers=${p2p.peers}
+                        -Djdbc.url=${jdbc.url}
+                        -Djdbc.user=${jdbc.user}
+                        -Djdbc.password=${jdbc.password}
+                    </jvmArgs>
                 </configuration>
             </plugin>
             <plugin>

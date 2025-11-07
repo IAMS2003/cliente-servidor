@@ -15,6 +15,8 @@ public class MensajeLog {
     private String archivoAudio;
     private String transcripcion;
     private LocalDateTime fecha;
+    private String servidorHost;
+    private Integer servidorPuerto;
 
     public MensajeLog() {
     }
@@ -100,6 +102,22 @@ public class MensajeLog {
 
     public void setFecha(LocalDateTime fecha) {
         this.fecha = fecha;
+    }
+
+    public String getServidorHost() {
+        return servidorHost;
+    }
+
+    public void setServidorHost(String servidorHost) {
+        this.servidorHost = servidorHost;
+    }
+
+    public Integer getServidorPuerto() {
+        return servidorPuerto;
+    }
+
+    public void setServidorPuerto(Integer servidorPuerto) {
+        this.servidorPuerto = servidorPuerto;
     }
 
     @Override

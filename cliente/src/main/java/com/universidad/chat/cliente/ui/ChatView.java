@@ -268,8 +268,8 @@ public class ChatView extends BorderPane {
                 try {
                     if (notificacion.has("tipo")) {
                         String tipo = notificacion.get("tipo").getAsString();
-                        if ("INVITACION_CANAL".equals(tipo)) {
-                            // Recibió invitación a un canal - mostrar diálogo de aceptar/rechazar
+                        if ("INVITACION_CANAL".equals(tipo) || "INVITACION_CANAL_REMOTO".equals(tipo)) {
+                            // Recibió invitación a un canal (local o remoto) - mostrar diálogo de aceptar/rechazar
                             Platform.runLater(() -> ChatView.this.mostrarDialogoInvitacion(notificacion));
                             return;
                         }
@@ -357,15 +357,15 @@ public class ChatView extends BorderPane {
             var usuarios = fUsuarios.join();
             var canales = fCanales.join();
             Platform.runLater(() -> {
-                Integer miId = svc.getIdUsuario();
-                // Filtrar el usuario propio de la lista de conectados
+                String miNombre = svc.getNombreUsuario();
+                // Filtrar el usuario propio (por nombre) y dejar visibles remotos aunque compartan ID
                 var usuariosFiltrados = usuarios.stream()
                     .filter(o -> {
-                        if (miId == null) return true;
                         try {
-                            int id = o.has("id") ? o.get("id").getAsInt() : -1;
-                            return id != miId;
-                        } catch (Exception e) { return true; }
+                            String nombre = o.has("nombreUsuario") ? o.get("nombreUsuario").getAsString() : null;
+                            if (miNombre != null && miNombre.equalsIgnoreCase(nombre)) return false; // soy yo
+                        } catch (Exception ignored) {}
+                        return true;
                     })
                     .map(ChatView::toUsuarioItem)
                     .toList();
@@ -388,14 +388,14 @@ public class ChatView extends BorderPane {
         svc.listarUsuariosConectados().whenComplete((usuarios, t) -> {
             if (t != null) return;
             Platform.runLater(() -> {
-                Integer miId = svc.getIdUsuario();
+                String miNombre = svc.getNombreUsuario();
                 var usuariosFiltrados = usuarios.stream()
                     .filter(o -> {
-                        if (miId == null) return true;
                         try {
-                            int id = o.has("id") ? o.get("id").getAsInt() : -1;
-                            return id != miId;
-                        } catch (Exception e) { return true; }
+                            String nombre = o.has("nombreUsuario") ? o.get("nombreUsuario").getAsString() : null;
+                            if (miNombre != null && miNombre.equalsIgnoreCase(nombre)) return false; // soy yo
+                        } catch (Exception ignored) {}
+                        return true;
                     })
                     .map(ChatView::toUsuarioItem)
                     .toList();
@@ -420,12 +420,19 @@ public class ChatView extends BorderPane {
     }
 
     // ==== Renderizado de usuarios con avatar ====
-    private static record UsuarioItem(int id, String nombre, Image avatar) {}
+    private static record UsuarioItem(int id, String nombre, Image avatar, String servidorHost, Integer servidorP2pPort) {}
 
     private static UsuarioItem toUsuarioItem(com.google.gson.JsonObject o) {
         int id = -1; String nombre = "usuario"; Image img = null;
         try { id = o.has("id") ? o.get("id").getAsInt() : -1; } catch (Exception ignored) {}
-        try { nombre = o.has("nombreUsuario") ? o.get("nombreUsuario").getAsString() : ("usuario " + id); } catch (Exception ignored) {}
+        String host = null; Integer p2p = null;
+        try {
+            String base = o.has("nombreUsuario") ? o.get("nombreUsuario").getAsString() : ("usuario " + id);
+            // Mostrar solo nombre, sin host/puerto
+            nombre = base;
+            host = o.has("servidorHost") ? o.get("servidorHost").getAsString() : null;
+            try { p2p = o.has("servidorP2pPort") ? o.get("servidorP2pPort").getAsInt() : null; } catch (Exception ignored) {}
+        } catch (Exception ignored) {}
         try {
             if (o.has("fotoBase64") && !o.get("fotoBase64").isJsonNull()) {
                 String b64 = o.get("fotoBase64").getAsString();
@@ -437,7 +444,7 @@ public class ChatView extends BorderPane {
                 }
             }
         } catch (Exception ignored) {}
-        return new UsuarioItem(id, nombre, img);
+        return new UsuarioItem(id, nombre, img, host, p2p);
     }
 
     {
@@ -634,9 +641,16 @@ public class ChatView extends BorderPane {
             String nombreCanal = invitacion.has("nombreCanal") ? invitacion.get("nombreCanal").getAsString() : "Canal";
             String nombreInvitador = invitacion.has("nombreInvitador") ? invitacion.get("nombreInvitador").getAsString() : "Alguien";
             
+            // Verificar si es invitación remota
+            boolean esRemoto = invitacion.has("servidorHost") && invitacion.has("servidorP2pPort");
+            String servidorHost = esRemoto ? invitacion.get("servidorHost").getAsString() : null;
+            Integer servidorP2pPort = esRemoto ? invitacion.get("servidorP2pPort").getAsInt() : null;
+            int idCreador = invitacion.has("idCreador") ? invitacion.get("idCreador").getAsInt() : 0;
+            boolean esPrivado = invitacion.has("esPrivado") ? invitacion.get("esPrivado").getAsBoolean() : true;
+            
             Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-            alert.setTitle("Invitación a Canal");
-            alert.setHeaderText("Has sido invitado a un canal");
+            alert.setTitle("Invitación a Canal" + (esRemoto ? " Remoto" : ""));
+            alert.setHeaderText("Has sido invitado a un canal" + (esRemoto ? " de otro servidor" : ""));
             alert.setContentText(nombreInvitador + " te ha invitado a unirte al canal \"" + nombreCanal + "\".\n\n¿Deseas aceptar la invitación?");
             
             ButtonType btnAceptar = new ButtonType("Aceptar");
@@ -649,10 +663,15 @@ public class ChatView extends BorderPane {
                 
                 new Thread(() -> {
                     try {
-                        var resultado = svc.responderInvitacionCanal(idCanal, aceptar).get();
+                        // Si es remoto, incluir metadatos del servidor en la respuesta
+                        if (esRemoto && aceptar) {
+                            svc.responderInvitacionCanalRemoto(idCanal, true, nombreCanal, idCreador, esPrivado, servidorHost, servidorP2pPort);
+                        } else {
+                            svc.responderInvitacionCanal(idCanal, aceptar);
+                        }
+                        
                         Platform.runLater(() -> {
-                            String mensaje = resultado.has("mensaje") ? resultado.get("mensaje").getAsString() : 
-                                (aceptar ? "Te has unido al canal" : "Invitación rechazada");
+                            String mensaje = aceptar ? "Te has unido al canal" + (esRemoto ? " remoto" : "") : "Invitación rechazada";
                             statusLabel.setText(mensaje);
                             agregarMensajeSistema(mensaje);
                             if (aceptar) {
@@ -663,13 +682,13 @@ public class ChatView extends BorderPane {
                     } catch (Exception ex) {
                         Platform.runLater(() -> {
                             statusLabel.setText("Error al responder invitación");
-                            agregarMensajeSistema("[Error] No se pudo responder la invitación");
+                            agregarMensajeSistema("[Error] No se pudo responder la invitación: " + ex.getMessage());
                         });
                     }
                 }).start();
             });
         } catch (Exception e) {
-            agregarMensajeSistema("[Error] Error procesando invitación");
+            agregarMensajeSistema("[Error] Error procesando invitación: " + e.getMessage());
         }
     }
 

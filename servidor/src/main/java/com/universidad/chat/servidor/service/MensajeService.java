@@ -111,6 +111,31 @@ public class MensajeService {
     }
 
     /**
+     * Obtener mensajes donde un usuario es emisor o receptor.
+     * Útil para sincronización cross-server.
+     */
+    public List<MensajeLog> obtenerMensajesDeUsuario(int idUsuario) {
+        try {
+            return mensajeLogDAO.obtenerMensajesDeUsuario(idUsuario);
+        } catch (SQLException e) {
+            logger.error("Error obteniendo mensajes del usuario {}", idUsuario, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * Obtener mensajes recientes de un usuario (últimos N días).
+     */
+    public List<MensajeLog> obtenerMensajesRecientesDeUsuario(int idUsuario, int dias) {
+        try {
+            return mensajeLogDAO.obtenerMensajesRecientesDeUsuario(idUsuario, dias);
+        } catch (SQLException e) {
+            logger.error("Error obteniendo mensajes recientes del usuario {}", idUsuario, e);
+            return List.of();
+        }
+    }
+
+    /**
      * Registrar evento de control/negocio (registro, login, logout, broadcast, etc.).
      * Se persiste en la misma tabla de logs usando un tipo distinguible.
      * @param tipo p.ej. EVENTO, REGISTRO, LOGIN, LOGOUT, BROADCAST_USUARIOS, BROADCAST_CANALES
@@ -129,6 +154,19 @@ public class MensajeService {
         } catch (SQLException e) {
             logger.error("Error registrando evento {}", tipo, e);
             return -1;
+        }
+    }
+
+    /**
+     * Verifica si un mensaje ya existe en la base de datos.
+     * Útil para evitar duplicados al recibir mensajes de servidores remotos.
+     */
+    public boolean mensajeExiste(int idEmisor, int idReceptor, Integer idCanal, String contenido) {
+        try {
+            return mensajeLogDAO.mensajeExiste(idEmisor, idReceptor, idCanal, contenido);
+        } catch (SQLException e) {
+            logger.error("Error verificando existencia de mensaje", e);
+            return false; // En caso de error, asumimos que no existe para no perder el mensaje
         }
     }
 }

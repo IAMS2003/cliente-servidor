@@ -13,6 +13,8 @@ public class Usuario {
     private String foto;
     private String direccionIP;
     private Integer puertoConexion; // Puerto del socket remoto de la última conexión
+    private String servidorHost; // servidor propietario del usuario
+    private Integer servidorPuerto; // puerto del servidor propietario
     private boolean conectado;
     private LocalDateTime fechaRegistro;
 
@@ -83,6 +85,11 @@ public class Usuario {
     public Integer getPuertoConexion() { return puertoConexion; }
     public void setPuertoConexion(Integer puertoConexion) { this.puertoConexion = puertoConexion; }
 
+    public String getServidorHost() { return servidorHost; }
+    public void setServidorHost(String servidorHost) { this.servidorHost = servidorHost; }
+    public Integer getServidorPuerto() { return servidorPuerto; }
+    public void setServidorPuerto(Integer servidorPuerto) { this.servidorPuerto = servidorPuerto; }
+
     public boolean isConectado() {
         return conectado;
     }
@@ -105,7 +112,8 @@ public class Usuario {
                 "id=" + id +
                 ", nombreUsuario='" + nombreUsuario + '\'' +
                 ", email='" + email + '\'' +
-        ", ip='" + direccionIP + ':' + (puertoConexion!=null?puertoConexion:"-") + '\'' +
+    ", ip='" + direccionIP + ':' + (puertoConexion!=null?puertoConexion:"-") + '\'' +
+        ", servidor=" + (servidorHost!=null?servidorHost:"-") + ':' + (servidorPuerto!=null?servidorPuerto:"-") +
                 ", conectado=" + conectado +
                 '}';
     }

@@ -1,0 +1,18 @@
+Tomando como base el proyecto chat universitario cliente - servidor se implmentaran las siguientes mejoras con el fin de convertilo en un P2P (una aplicación distribuida).
+
+Servidor:
+    - Registrara servidores usuando la dirección IP.
+    - El servidor guardara la información de los servidores con los que se conecte (persistir la IP de los servidores).
+    - La información de usuarios conectados al servidor se enviara a todos los servidores en tiempo real, si se desconecta un usuario también se notifica al resto de servidores.
+    - Los logs también registraran la información que se envia o recibe de otros servidores.
+    - Habra un apartado de servidores conectado en donde se vera la IP seguido del puerto.
+    - La lista de los clientes conectados ahora tambien mostrara la información del servidor al que esta conectado.
+    - Si un usuario esta registrado en un servidor solo puede conectarse mediante ese servidor.
+    - Guardara unicamente los canales de los demás servidores cuando un usuario registrado por el servidor forme parte de él(guardara todo el historial de mensajes en el canal).
+    - El servidor unicamente guardara la información de los mensajes (audio y texto) que sea enviado o recibido por un usuario registrado en el servidor, o un canal del que un usuario registrado del servidor forme parte.
+    - El servidor solo puede desconectar a usuarios que esten conectados mediante el (solo puede desconectar a usuarios que tenga registrados el).
+
+Cliente:
+    - Los usuarios que esten conectados veran a todos los usuarios que estan en linea de todos los servidores.
+    - Los usuarios podran intercambiar mensajes de audio y texto entre usuarios del mismo o distinto servidor.
+    - Los usuarios de distintos servidores ahora también se pueden incluir en los canales de otros servidores y la información tendra que llegarles igual. 

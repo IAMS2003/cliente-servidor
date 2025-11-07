@@ -51,7 +51,8 @@ public class PDFExporter {
                         cs = new PDPageContentStream(doc, page);
                         cs.setFont(PDType1Font.HELVETICA, 10);
                     }
-                    String line = String.format("ID:%d | %s | %s | conectado:%s", u.getId(), u.getNombreUsuario(), u.getEmail(), u.isConectado());
+                    String srv = (u.getServidorHost()!=null?u.getServidorHost():"-") + ":" + (u.getServidorPuerto()!=null?u.getServidorPuerto():0);
+                    String line = String.format("ID:%d | %s | %s | conectado:%s | Servidor:%s", u.getId(), u.getNombreUsuario(), u.getEmail(), u.isConectado(), srv);
                     cs.beginText();
                     cs.newLineAtOffset(margin, y);
                     cs.showText(line);
@@ -92,12 +93,9 @@ public class PDFExporter {
                         cs = new PDPageContentStream(doc, page);
                         cs.setFont(PDType1Font.HELVETICA, 10);
                     }
-                    String line = String.format(
-                        "ID:%d | %s | IP:%s",
-                        u.getId(),
-                        u.getNombreUsuario(),
-                        u.getDireccionIP() + (u.getPuertoConexion()!=null?":"+u.getPuertoConexion():"")
-                    );
+                    String srv = (u.getServidorHost()!=null?u.getServidorHost():"-") + ":" + (u.getServidorPuerto()!=null?u.getServidorPuerto():0);
+                    String ip = (u.getDireccionIP()!=null?u.getDireccionIP():"-") + (u.getPuertoConexion()!=null?":"+u.getPuertoConexion():"");
+                    String line = String.format("ID:%d | %s | IP:%s | Servidor:%s", u.getId(), u.getNombreUsuario(), ip, srv);
                     cs.beginText();
                     cs.newLineAtOffset(margin, y);
                     cs.showText(line);
@@ -235,8 +233,12 @@ public class PDFExporter {
                 cs.setFont(PDType1Font.HELVETICA, 10);
                 y -= 24;
                 for (MensajeLog m : logs) {
+                    String servidor = "";
+                    if (m.getServidorHost() != null) {
+                        servidor = m.getServidorHost() + (m.getServidorPuerto() != null ? (":" + m.getServidorPuerto()) : "");
+                    }
                     String[] lines = new String[]{
-                        String.format("ID:%d | Tipo:%s | Em:%d -> Re:%d | Canal:%s | %s", m.getId(), m.getTipoMensaje(), m.getIdEmisor(), m.getIdReceptor(), m.getIdCanal(), m.getFecha()!=null?FMT.format(m.getFecha()):""),
+                        String.format("ID:%d | Tipo:%s | Em:%d -> Re:%d | Canal:%s | Servidor:%s | %s", m.getId(), m.getTipoMensaje(), m.getIdEmisor(), m.getIdReceptor(), m.getIdCanal(), servidor, m.getFecha()!=null?FMT.format(m.getFecha()):""),
                         String.format("Contenido: %s", m.getContenido()!=null?m.getContenido():""),
                         ""
                     };
